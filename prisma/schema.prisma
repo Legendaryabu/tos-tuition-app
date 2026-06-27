@@ -1,0 +1,677 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Plan {
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  priceMonthly Float    @default(0)
+  priceYearly  Float    @default(0)
+  currency     String   @default("LKR")
+  maxStudents  Int?
+  maxTeachers  Int?
+  maxBranches  Int?
+  features     String   @default("[]")
+  isActive     Boolean  @default(true)
+  trialDays    Int      @default(14)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Institute {
+  id                   String    @id @default(cuid())
+  uuid                 String    @unique @default(cuid())
+  name                 String
+  slug                 String    @unique
+  logo                 String?
+  type                 String    @default("individual")
+  phone                String
+  whatsapp             String?
+  email                String
+  city                 String    @default("Colombo")
+  district             String    @default("Colombo")
+  addressLine1         String?
+  currency             String    @default("LKR")
+  timezone             String    @default("Asia/Colombo")
+  receiptPrefix        String    @default("RCP")
+  invoicePrefix        String    @default("INV")
+  studentNumberPrefix  String    @default("STU")
+  studentNumberSeq     Int       @default(1)
+  features             String    @default("[]")
+  zoomAccountId        String?
+  zoomApiKey           String?
+  zoomApiSecret        String?
+  zoomAccessToken      String?
+  zoomRefreshToken     String?
+  zoomTokenExpiresAt   DateTime?
+  zoomWebhookSecret    String?
+  zoomEnabled          Boolean   @default(false)
+  isActive             Boolean   @default(true)
+  onboardingCompleted  Boolean   @default(false)
+  planId               String
+  ownerId              String    @unique
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+}
+
+model User {
+  id              String    @id @default(cuid())
+  uuid            String    @unique @default(cuid())
+  instituteId     String?
+  branchId        String?
+  type            String    @default("owner")
+  firstName       String
+  lastName        String
+  preferredName   String?
+  profilePhoto    String?
+  gender          String?
+  dateOfBirth     DateTime?
+  mobile          String?
+  whatsapp        String?
+  email           String?
+  password        String?
+  status          String    @default("active")
+  onboardingStep  Int       @default(0)
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model Branch {
+  id          String   @id @default(cuid())
+  uuid        String   @unique @default(cuid())
+  instituteId String
+  name        String
+  code        String?
+  managerId   String?
+  phone       String?
+  email       String?
+  city        String?
+  district    String?
+  addressLine1 String?
+  isActive    Boolean  @default(true)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Hall {
+  id          String   @id @default(cuid())
+  branchId    String
+  name        String
+  capacity    Int
+  hasAc       Boolean  @default(false)
+  hasProjector Boolean  @default(false)
+  hasWhiteboard Boolean @default(true)
+  isActive    Boolean  @default(true)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Subject {
+  id          String   @id @default(cuid())
+  instituteId String
+  code        String?
+  name        String
+  nameSinhala String?
+  nameTamil   String?
+  description String?
+  gradeLevel  String?
+  category    String?
+  color       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Batch {
+  id                  String   @id @default(cuid())
+  uuid                String   @unique @default(cuid())
+  instituteId         String
+  branchId            String?
+  subjectId           String
+  teacherId           String?
+  name                String
+  code                String?
+  description         String?
+  gradeLevel          String?
+  academicYear        String?
+  medium              String   @default("english")
+  classType           String   @default("physical")
+  maxStudents         Int?
+  currentStudents     Int      @default(0)
+  monthlyFee          Float?
+  registrationFee     Float    @default(0)
+  daysOfWeek          String   @default("[]")
+  startTime           String?
+  endTime             String?
+  typicalDurationMin  Int?
+  onlinePlatform      String?
+  onlineMeetingUrl    String?
+  onlineMeetingId     String?
+  onlinePasscode      String?
+  whatsappGroupLink   String?
+  status              String   @default("upcoming")
+  isVisibleToStudents Boolean  @default(true)
+  isEnrollmentOpen    Boolean  @default(true)
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model BatchStudent {
+  id          String   @id @default(cuid())
+  batchId     String
+  studentId   String
+  status      String   @default("active")
+  feeOverride Float?
+  notes       String?
+  enrolledAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([batchId, studentId])
+}
+
+model TimetableSlot {
+  id            String   @id @default(cuid())
+  instituteId   String
+  branchId      String?
+  batchId       String
+  teacherId     String?
+  hallId        String?
+  dayOfWeek     Int
+  startTime     String
+  endTime       String
+  effectiveFrom DateTime @default(now())
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model ClassSession {
+  id               String    @id @default(cuid())
+  uuid             String    @unique @default(cuid())
+  instituteId      String
+  branchId         String?
+  batchId          String
+  teacherId        String?
+  hallId           String?
+  timetableSlotId  String?
+  sessionDate      DateTime
+  startTime        String?
+  endTime          String?
+  durationMinutes  Int?
+  isOnline         Boolean   @default(false)
+  onlinePlatform   String?
+  onlineMeetingUrl String?
+  onlineMeetingId  String?
+  onlinePasscode   String?
+  recordingUrl     String?
+  topic            String?
+  description      String?
+  homework         String?
+  status           String   @default("scheduled")
+  statusReason     String?
+  actualStartedAt  DateTime?
+  actualEndedAt    DateTime?
+  isExtraClass     Boolean   @default(false)
+  isFeeApplicable  Boolean   @default(false)
+  extraClassFee    Float?
+  createdBy        String
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model ZoomMeeting {
+  id               String    @id @default(cuid())
+  uuid             String    @unique @default(cuid())
+  instituteId      String
+  batchId          String?
+  classSessionId   String?
+  teacherId        String?
+  zoomMeetingId    String    @unique
+  zoomMeetingNumber Int?
+  topic            String
+  hostEmail        String?
+  joinUrl          String
+  startUrl         String?
+  passcode         String?
+  status           String   @default("scheduled")
+  startTime        DateTime?
+  durationMinutes  Int       @default(60)
+  recurrenceType   String?
+  settings         String?
+  participantCount Int       @default(0)
+  recordingUrl     String?
+  recordingStatus  String?
+  tbosCreated      Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model Student {
+  id                 String   @id @default(cuid())
+  uuid               String   @unique @default(cuid())
+  userId             String   @unique
+  instituteId        String
+  branchId           String?
+  studentNumber      String
+  fullName           String
+  gender             String?
+  dateOfBirth        DateTime?
+  schoolName         String?
+  grade              String?
+  stream             String?
+  examYear           Int?
+  mobile             String?
+  whatsapp           String?
+  email              String?
+  addressLine1       String?
+  city               String?
+  district           String?
+  status             String   @default("active")
+  enrolledAt         DateTime @default(now())
+  outstandingBalance Float    @default(0)
+  totalPaid          Float    @default(0)
+  referredBy         String?
+  referralSource     String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model StudentNote {
+  id         String   @id @default(cuid())
+  studentId  String
+  note       String
+  isFlagged  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model StudentTimeline {
+  id          String   @id @default(cuid())
+  studentId   String
+  instituteId String
+  type        String
+  description String
+  meta        String?
+  createdAt   DateTime @default(now())
+}
+
+model Teacher {
+  id                   String   @id @default(cuid())
+  uuid                 String   @unique @default(cuid())
+  userId               String   @unique
+  instituteId          String
+  employeeNumber       String?
+  bio                  String?
+  qualifications       String?
+  experienceYears      Int?
+  specializations      String?
+  employmentType       String   @default("part_time")
+  salaryType           String?
+  basicSalary          Float?
+  commissionPercentage Float?
+  zoomPersonalLink     String?
+  googleMeetId         String?
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model Employee {
+  id             String   @id @default(cuid())
+  uuid           String   @unique @default(cuid())
+  userId         String   @unique
+  instituteId    String
+  branchId       String?
+  roleTitle      String
+  department     String?
+  employeeNumber String?
+  employmentType String   @default("full_time")
+  basicSalary    Float?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model AttendanceRecord {
+  id             String   @id @default(cuid())
+  classSessionId String
+  studentId      String
+  batchId        String
+  instituteId    String
+  status         String   @default("present")
+  checkInTime    String?
+  markedBy       String?
+  excuseReason   String?
+  notes          String?
+  markedAt       DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([classSessionId, studentId])
+}
+
+model FeeStructure {
+  id              String   @id @default(cuid())
+  instituteId     String
+  branchId        String?
+  batchId         String?
+  name            String
+  type            String   @default("monthly")
+  amount          Float
+  isRecurring     Boolean  @default(false)
+  recurrence      String?
+  dueDay          Int?
+  gracePeriodDays Int      @default(0)
+  lateFeeAmount   Float    @default(0)
+  lateFeeType     String?
+  description     String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model FeeDue {
+  id              String   @id @default(cuid())
+  uuid            String   @unique @default(cuid())
+  instituteId     String
+  studentId       String
+  batchId         String?
+  feeStructureId  String?
+  type            String   @default("monthly")
+  description     String
+  amount          Float
+  dueDate         DateTime
+  periodMonth     Int?
+  periodYear      Int?
+  status          String   @default("unpaid")
+  amountPaid      Float    @default(0)
+  waivedAmount    Float    @default(0)
+  lateFeeApplied  Float    @default(0)
+  paidAt          DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Payment {
+  id                 String   @id @default(cuid())
+  uuid               String   @unique @default(cuid())
+  instituteId        String
+  branchId           String?
+  studentId          String
+  amount             Float
+  currency           String   @default("LKR")
+  paymentMethod      String   @default("cash")
+  referenceNumber    String?
+  bankName           String?
+  slipImage          String?
+  verificationStatus String   @default("not_required")
+  notes              String?
+  status             String   @default("completed")
+  recordedBy         String
+  recordedAt         DateTime @default(now())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model PaymentAllocation {
+  id        String  @id @default(cuid())
+  paymentId String
+  feeDueId  String
+  amount    Float
+  createdAt DateTime @default(now())
+}
+
+model Invoice {
+  id            String   @id @default(cuid())
+  uuid          String   @unique @default(cuid())
+  instituteId   String
+  studentId     String
+  invoiceNumber String
+  issueDate     DateTime @default(now())
+  dueDate       DateTime
+  subtotal      Float
+  total         Float
+  amountPaid    Float    @default(0)
+  status        String   @default("draft")
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Receipt {
+  id            String   @id @default(cuid())
+  uuid          String   @unique @default(cuid())
+  instituteId   String
+  paymentId     String   @unique
+  studentId     String
+  receiptNumber String
+  issueDate     DateTime @default(now())
+  totalAmount   Float
+  paymentMethod String
+  generatedBy   String
+  createdAt     DateTime @default(now())
+}
+
+model Exam {
+  id                 String    @id @default(cuid())
+  uuid               String    @unique @default(cuid())
+  instituteId        String
+  batchId            String?
+  subjectId          String?
+  name               String
+  type               String    @default("mcq")
+  examDate           DateTime?
+  startTime          String?
+  endTime            String?
+  totalMarks         Float
+  passMarks          Float?
+  isResultsPublished Boolean   @default(false)
+  resultsPublishedAt DateTime?
+  status             String    @default("scheduled")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+model ExamResult {
+  id            String   @id @default(cuid())
+  examId        String
+  studentId     String
+  marksObtained Float?
+  grade         String?
+  rank          Int?
+  isAbsent      Boolean  @default(false)
+  remarks       String?
+  enteredAt     DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([examId, studentId])
+}
+
+model Assignment {
+  id             String   @id @default(cuid())
+  uuid           String   @unique @default(cuid())
+  instituteId    String
+  batchId        String
+  classSessionId String?
+  title          String
+  description    String?
+  instructions   String?
+  totalMarks     Float?
+  passMarks      Float?
+  dueAt          DateTime
+  isGraded       Boolean  @default(true)
+  status         String   @default("published")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model AssignmentSubmission {
+  id           String   @id @default(cuid())
+  assignmentId String
+  studentId    String
+  submittedAt  DateTime @default(now())
+  isLate       Boolean  @default(false)
+  notes        String?
+  status       String   @default("submitted")
+  marks        Float?
+  grade        String?
+  feedback     String?
+  gradedAt     DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([assignmentId, studentId])
+}
+
+model StudyMaterial {
+  id            String   @id @default(cuid())
+  uuid          String   @unique @default(cuid())
+  instituteId   String
+  uploadedBy    String?
+  title         String
+  description   String?
+  type          String   @default("pdf")
+  filePath      String?
+  fileName      String?
+  fileSize      Int?
+  externalUrl   String?
+  subjectId     String?
+  gradeLevel    String?
+  tags          String?
+  accessType    String   @default("all_batches")
+  downloadCount Int      @default(0)
+  viewCount     Int      @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Video {
+  id              String   @id @default(cuid())
+  uuid            String   @unique @default(cuid())
+  instituteId     String
+  batchId         String?
+  subjectId       String?
+  uploadedBy      String?
+  title           String
+  description     String?
+  source          String   @default("upload")
+  videoUrl        String
+  embedUrl        String?
+  thumbnail       String?
+  durationSeconds Int?
+  fileSize        Int?
+  classSessionId  String?
+  accessType      String   @default("all_batches")
+  viewCount       Int      @default(0)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Message {
+  id          String   @id @default(cuid())
+  uuid        String   @unique @default(cuid())
+  instituteId String
+  senderId    String
+  subject     String?
+  body        String
+  type        String   @default("individual")
+  sentAt      DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Announcement {
+  id          String   @id @default(cuid())
+  uuid        String   @unique @default(cuid())
+  instituteId String
+  branchId    String?
+  authorId    String?
+  title       String
+  body        String
+  audience    String   @default("all")
+  priority    String   @default("normal")
+  isPinned    Boolean  @default(false)
+  publishAt   DateTime @default(now())
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  data      String?
+  isRead    Boolean   @default(false)
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model NotificationPreference {
+  id        String  @id @default(cuid())
+  userId    String
+  channel   String  @default("database")
+  event     String
+  isEnabled Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, channel, event])
+}
+
+model Subscription {
+  id            String   @id @default(cuid())
+  instituteId   String
+  planId        String
+  status        String   @default("trial")
+  billingCycle  String   @default("monthly")
+  amount        Float
+  currency      String   @default("LKR")
+  startedAt     DateTime @default(now())
+  endsAt        DateTime
+  trialEndsAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model InstituteSetting {
+  id         String  @id @default(cuid())
+  instituteId String
+  key        String
+  value      String?
+  type       String  @default("string")
+  group      String  @default("general")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([instituteId, key])
+}
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  instituteId String?
+  description String
+  subjectType String?
+  subjectId   String?
+  causerId    String?
+  properties  String?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+}
