@@ -1,0 +1,399 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useAppStore } from '@/lib/store'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  GraduationCap,
+  Layers,
+  DollarSign,
+  CheckCircle,
+  UserPlus,
+  Video,
+  Banknote,
+  ClipboardCheck,
+  ArrowRight,
+  Clock,
+  CalendarDays,
+  Users,
+  TrendingUp,
+  AlertTriangle,
+  CreditCard,
+} from 'lucide-react'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+
+interface DashboardStats {
+  totalStudents: number
+  totalBatches: number
+  activeBatches: number
+  totalTeachers: number
+  monthlyRevenue: number
+  attendanceRate: number
+  unpaidDues: { count: number; totalAmount: number }
+}
+
+interface TodayClass {
+  id: string
+  startTime?: string
+  endTime?: string
+  isOnline: boolean
+  status: string
+  topic?: string
+  batch?: { name: string; subject?: { name: string; color?: string } | null } | null
+  teacher?: { firstName: string; lastName: string } | null
+  sessionDate: string
+}
+
+interface RecentPayment {
+  id: string
+  amount: number
+  paymentMethod: string
+  recordedAt: string
+  status: string
+  notes?: string
+  student?: { fullName: string; studentNumber: string } | null
+}
+
+interface UpcomingSession {
+  id: string
+  startTime?: string
+  sessionDate: string
+  topic?: string
+  batch?: { name: string; subject?: { name: string; color?: string } | null } | null
+  teacher?: { firstName: string; lastName: string } | null
+}
+
+interface DashboardData {
+  stats: DashboardStats
+  todayClasses: TodayClass[]
+  upcomingSessions: UpcomingSession[]
+  recentPayments: RecentPayment[]
+  revenueHistory: { month: string; revenue: number }[]
+}
+
+function formatLKR(amount: number): string {
+  return `Rs. ${amount.toLocaleString('en-LK')}`
+}
+
+function formatTime(timeStr?: string): string {
+  if (!timeStr) return ''
+  const [h, m] = timeStr.split(':').map(Number)
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  const hour12 = h % 12 || 12
+  return `${hour12}:${m.toString().padStart(2, '0')} ${ampm}`
+}
+
+function formatDate(dateStr: string): string {
+  const date = new Date(dateStr)
+  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+}
+
+export default function DashboardView() {
+  const { currentInstitute, setActiveView } = useAppStore()
+  const [data, setData] = useState<DashboardData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!currentInstitute?.id) return
+    const fetchData = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const res = await fetch(`/api/dashboard/stats?instituteId=${currentInstitute.id}`)
+        if (!res.ok) throw new Error('Failed to load dashboard')
+        const json = await res.json()
+        setData(json)
+      } catch (err: any) {
+        setError(err.message || 'Something went wrong')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [currentInstitute?.id])
+
+  const quickActions = [
+    { label: 'Add Student', icon: <UserPlus className="h-4 w-4" />, view: 'students' as const, color: 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' },
+    { label: 'Create Batch', icon: <Layers className="h-4 w-4" />, view: 'batches' as const, color: 'bg-sky-50 text-sky-600 hover:bg-sky-100' },
+    { label: 'Record Payment', icon: <Banknote className="h-4 w-4" />, view: 'fees' as const, color: 'bg-amber-50 text-amber-600 hover:bg-amber-100' },
+    { label: 'Mark Attendance', icon: <ClipboardCheck className="h-4 w-4" />, view: 'attendance' as const, color: 'bg-rose-50 text-rose-600 hover:bg-rose-100' },
+  ]
+
+  const statusColors: Record<string, string> = {
+    live: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    in_progress: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    scheduled: 'bg-sky-50 text-sky-700 border-sky-200',
+    completed: 'bg-gray-100 text-gray-500 border-gray-200',
+    cancelled: 'bg-red-50 text-red-500 border-red-200',
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <Card className="border-destructive/50">
+          <CardContent className="p-8 text-center">
+            <AlertTriangle className="h-10 w-10 text-destructive mx-auto mb-3" />
+            <h3 className="font-semibold text-lg">Failed to load dashboard</h3>
+            <p className="text-sm text-muted-foreground mt-1">{error}</p>
+            <Button variant="outline" className="mt-4" onClick={() => window.location.reload()}>
+              Try Again
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Welcome */}
+      <div>
+        <h1 className="text-2xl font-bold">Welcome back!</h1>
+        <p className="text-muted-foreground mt-1">
+          Here&apos;s what&apos;s happening at {currentInstitute?.name || 'your institute'} today.
+        </p>
+      </div>
+
+      {/* Stat Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {loading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i} className="p-4">
+              <Skeleton className="h-4 w-24 mb-3" />
+              <Skeleton className="h-8 w-20" />
+              <Skeleton className="h-3 w-16 mt-2" />
+            </Card>
+          ))
+        ) : (
+          <>
+            <Card className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm text-muted-foreground">Total Students</span>
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
+                  <GraduationCap className="h-4 w-4 text-emerald-600" />
+                </div>
+              </div>
+              <p className="text-2xl font-bold">{data?.stats.totalStudents ?? 0}</p>
+              {data?.stats.totalStudents === 0 && (
+                <p className="text-xs text-muted-foreground mt-1">No students yet</p>
+              )}
+            </Card>
+            <Card className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm text-muted-foreground">Active Batches</span>
+                <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center">
+                  <Layers className="h-4 w-4 text-teal-600" />
+                </div>
+              </div>
+              <p className="text-2xl font-bold">{data?.stats.activeBatches ?? 0}</p>
+              {data?.stats.totalBatches === 0 && (
+                <p className="text-xs text-muted-foreground mt-1">No batches yet</p>
+              )}
+            </Card>
+            <Card className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm text-muted-foreground">Monthly Revenue</span>
+                <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
+                  <DollarSign className="h-4 w-4 text-amber-600" />
+                </div>
+              </div>
+              <p className="text-2xl font-bold">{formatLKR(data?.stats.monthlyRevenue ?? 0)}</p>
+              {data?.stats.unpaidDues.count > 0 && (
+                <p className="text-xs text-amber-600 mt-1">
+                  {data.stats.unpaidDues.count} unpaid ({formatLKR(data.stats.unpaidDues.totalAmount)})
+                </p>
+              )}
+            </Card>
+            <Card className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm text-muted-foreground">Attendance Rate</span>
+                <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center">
+                  <CheckCircle className="h-4 w-4 text-rose-600" />
+                </div>
+              </div>
+              <p className="text-2xl font-bold">{data?.stats.attendanceRate ?? 0}%</p>
+              {data?.stats.totalTeachers > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">{data.stats.totalTeachers} teachers</p>
+              )}
+            </Card>
+          </>
+        )}
+      </div>
+
+      {/* Quick Actions */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {quickActions.map((action) => (
+          <Button
+            key={action.view}
+            variant="outline"
+            className={`h-auto py-4 flex-col gap-2 font-medium ${action.color} border-0`}
+            onClick={() => setActiveView(action.view)}
+          >
+            {action.icon}
+            <span className="text-xs">{action.label}</span>
+          </Button>
+        ))}
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-6">
+        {/* Today's Classes */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <CalendarDays className="h-4 w-4" />
+                Today&apos;s Classes
+              </CardTitle>
+              <Button variant="ghost" size="sm" onClick={() => setActiveView('sessions')}>
+                View All <ArrowRight className="h-3 w-3 ml-1" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-16 w-full rounded-lg" />
+                ))}
+              </div>
+            ) : !data?.todayClasses?.length ? (
+              <div className="py-8 text-center">
+                <Clock className="h-10 w-10 text-muted-foreground/30 mx-auto mb-2" />
+                <p className="text-sm font-medium text-muted-foreground">No classes scheduled today</p>
+                <p className="text-xs text-muted-foreground mt-1">Create batches and timetable to see classes here</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {data.todayClasses.map((cls) => (
+                  <div
+                    key={cls.id}
+                    className="flex items-center gap-4 p-3 rounded-lg border hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="text-center min-w-[60px]">
+                      <p className="text-sm font-bold">{formatTime(cls.startTime)}</p>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">
+                        {cls.topic || cls.batch?.name || 'Untitled Class'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {cls.teacher ? `${cls.teacher.firstName} ${cls.teacher.lastName}` : 'No teacher assigned'}
+                        {cls.batch?.subject ? ` · ${cls.batch.subject.name}` : ''}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {cls.isOnline && <Badge variant="outline" className="text-[10px]">Online</Badge>}
+                      <Badge variant="outline" className={`text-[10px] ${statusColors[cls.status] || ''}`}>
+                        {cls.status === 'in_progress' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse" />}
+                        {cls.status.replace('_', ' ')}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Recent Activity / Payments */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <CreditCard className="h-4 w-4" />
+                Recent Payments
+              </CardTitle>
+              <Button variant="ghost" size="sm" onClick={() => setActiveView('payments')}>
+                View All <ArrowRight className="h-3 w-3 ml-1" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-14 w-full rounded-lg" />
+                ))}
+              </div>
+            ) : !data?.recentPayments?.length ? (
+              <div className="py-8 text-center">
+                <Banknote className="h-10 w-10 text-muted-foreground/30 mx-auto mb-2" />
+                <p className="text-sm font-medium text-muted-foreground">No payments recorded yet</p>
+                <p className="text-xs text-muted-foreground mt-1">Payments will appear here once recorded</p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {data.recentPayments.map((p) => (
+                  <div key={p.id} className="flex gap-3">
+                    <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center shrink-0 text-xs font-bold text-amber-600">
+                      Rs
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {p.student?.fullName || 'Unknown Student'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatLKR(p.amount)} · {p.paymentMethod}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {formatDate(p.recordedAt)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Revenue Chart */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" />
+                Revenue Overview
+              </CardTitle>
+              <CardDescription>Monthly revenue for the last 6 months</CardDescription>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setActiveView('payments')}>
+              View All <ArrowRight className="h-3 w-3 ml-1" />
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <Skeleton className="h-64 w-full rounded-lg" />
+          ) : !data?.revenueHistory?.some(r => r.revenue > 0) ? (
+            <div className="py-12 text-center">
+              <TrendingUp className="h-10 w-10 text-muted-foreground/30 mx-auto mb-2" />
+              <p className="text-sm font-medium text-muted-foreground">No revenue data yet</p>
+              <p className="text-xs text-muted-foreground mt-1">Revenue will appear here once payments are recorded</p>
+            </div>
+          ) : (
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data.revenueHistory} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="oklch(0.92 0.01 163)" />
+                  <XAxis dataKey="month" tick={{ fontSize: 12, fill: 'oklch(0.556 0 0)' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 12, fill: 'oklch(0.556 0 0)' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} />
+                  <Tooltip
+                    formatter={(value: number) => [formatLKR(value), 'Revenue']}
+                    contentStyle={{ borderRadius: '8px', border: '1px solid oklch(0.92 0.01 163)', fontSize: '12px' }}
+                  />
+                  <Bar dataKey="revenue" fill="oklch(0.51 0.12 163)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
