@@ -39,10 +39,8 @@ import {
   X,
   ChevronLeft,
   Shield,
-  Sun,
-  Moon,
 } from 'lucide-react'
-import { useTheme } from 'next-themes'
+import { Input } from '@/components/ui/input'
 
 interface NavItem {
   label: string
@@ -97,8 +95,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     onNavigate?.()
   }
 
-  const handleLogout = async () => {
-    try { await fetch('/api/auth/logout', { method: 'POST' }) } catch { /* ignore */ }
+  const handleLogout = () => {
     setCurrentUser(null)
     setCurrentInstitute(null)
     setActiveView('login')
@@ -245,22 +242,20 @@ function MobileSidebar() {
 
 function Header() {
   const { activeView, toggleSidebar, notifications, unreadCount, markAllRead, markAsRead, currentUser, setCurrentUser, setCurrentInstitute, setActiveView } = useAppStore()
-  const { theme, setTheme } = useTheme()
   const title = viewTitles[activeView] || 'Dashboard'
 
   const initials = currentUser
     ? `${currentUser.firstName.charAt(0)}${currentUser.lastName.charAt(0)}`.toUpperCase()
     : 'U'
 
-  const handleLogout = async () => {
-    try { await fetch('/api/auth/logout', { method: 'POST' }) } catch { /* ignore */ }
+  const handleLogout = () => {
     setCurrentUser(null)
     setCurrentInstitute(null)
     setActiveView('login')
   }
 
   return (
-    <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-sm border-b">
+    <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-sm border-b">
       <div className="flex items-center gap-3 px-4 py-3 lg:px-6">
         {/* Mobile menu button */}
         <Button variant="ghost" size="icon" className="lg:hidden" onClick={toggleSidebar}>
@@ -273,28 +268,14 @@ function Header() {
         {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Search - triggers Command Palette */}
-        <button
-          onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))}
-          className="relative hidden md:flex items-center gap-2 w-64 h-9 px-3 rounded-md bg-muted/50 hover:bg-muted text-sm text-muted-foreground cursor-pointer transition-colors"
-        >
-          <Search className="h-4 w-4" />
-          <span className="flex-1 text-left">Search...</span>
-          <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-background px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
-            <span className="text-xs">⌘</span>K
-          </kbd>
-        </button>
-
-        {/* Theme toggle */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-        >
-          <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-          <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-          <span className="sr-only">Toggle theme</span>
-        </Button>
+        {/* Search */}
+        <div className="relative hidden md:block w-64">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search..."
+            className="pl-9 h-9 bg-muted/50 border-0 focus-visible:ring-1"
+          />
+        </div>
 
         {/* Notifications */}
         <DropdownMenu>

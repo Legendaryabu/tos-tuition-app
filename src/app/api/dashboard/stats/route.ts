@@ -7,83 +7,108 @@ export async function GET(request: NextRequest) {
     const instituteId = searchParams.get("instituteId");
 
     if (!instituteId) {
-      return NextResponse.json({ error: "instituteId is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "instituteId is required" },
+        { status: 400 }
+      );
     }
 
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    // Week start (Monday) for "due this week"
-    const dayOfWeek = today.getDay();
-    const weekStart = new Date(today);
-    weekStart.setDate(today.getDate() - ((dayOfWeek + 6) % 7));
-
-    // Month boundaries
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-
-    // ── Phase 1: Parallel core queries ──────────────────────────
-
+    // Parallel queries for dashboard data
     const [
       totalStudents,
       totalBatches,
       activeBatches,
       totalTeachers,
       monthlyRevenue,
-      todayPaymentsData,
-      newStudentsThisMonth,
       todayClasses,
       upcomingSessions,
       recentAttendance,
-      unpaidPartialDues,
+      unpaidDues,
       recentPayments,
       batches,
       teachers,
     ] = await Promise.all([
-      db.student.count({ where: { instituteId, status: "active" } }),
-      db.batch.count({ where: { instituteId } }),
-      db.batch.count({ where: { instituteId, status: "active" } }),
-      db.teacher.count({ where: { instituteId, isActive: true } }),
-      db.payment.aggregate({
-        _sum: { amount: true },
-        where: { instituteId, status: "completed", recordedAt: { gte: monthStart, lt: monthEnd } },
-      }),
-      db.payment.aggregate({
-        _sum: { amount: true },
-        _count: true,
-        where: { instituteId, status: "completed", recordedAt: { gte: today, lt: tomorrow } },
-      }),
       db.student.count({
-        where: { instituteId, status: "active", enrolledAt: { gte: monthStart, lt: monthEnd } },
+        where: { instituteId, status: "active" },
       }),
+      db.batch.count({
+        where: { instituteId },
+      }),
+      db.batch.count({
+        where: { instituteId, status: "active" },
+      }),
+      db.teacher.count({
+        where: { instituteId, isActive: true },
+      }),
+      db.payment.aggregate({
+        _sum: { amount: true },
+        where: {
+          instituteId,
+          status: "completed",
+          recordedAt: {
+            gte: new Date(today.getFullYear(), today.getMonth(), 1),
+            lt: new Date(today.getFullYear(), today.getMonth() + 1, 1),
+          },
+        },
+      }),
+      // Today's classes
       db.classSession.findMany({
-        where: { instituteId, sessionDate: { gte: today, lt: tomorrow } },
+        where: {
+          instituteId,
+          sessionDate: { gte: today, lt: tomorrow },
+        },
         orderBy: { startTime: "asc" },
       }),
+      // Upcoming sessions (next 7 days)
       db.classSession.findMany({
-        where: { instituteId, sessionDate: { gte: today }, status: "scheduled" },
+        where: {
+          instituteId,
+          sessionDate: { gte: today },
+          status: "scheduled",
+        },
         orderBy: [{ sessionDate: "asc" }, { startTime: "asc" }],
         take: 10,
       }),
+      // Attendance rate (last 30 days)
       db.attendanceRecord.groupBy({
         by: ["status"],
-        where: { instituteId, markedAt: { gte: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000) } },
+        where: {
+          instituteId,
+          markedAt: {
+            gte: new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000),
+          },
+        },
         _count: { status: true },
       }),
-      // All unpaid/partial dues for summary calculation
-      db.feeDue.findMany({
-        where: { instituteId, status: { in: ["unpaid", "partial"] } },
-        select: { id: true, amount: true, amountPaid: true, waivedAmount: true, dueDate: true, studentId: true, status: true, description: true, periodMonth: true, periodYear: true },
+      // Unpaid dues
+      db.feeDue.aggregate({
+        _sum: { amount: true },
+        _count: true,
+        where: {
+          instituteId,
+          status: "unpaid",
+        },
       }),
+      // Recent payments (last 10)
       db.payment.findMany({
         where: { instituteId },
         orderBy: { recordedAt: "desc" },
         take: 10,
+        include: {
+          student: { select: { id: true, fullName: true, studentNumber: true } },
+        },
       }),
-      db.batch.findMany({ where: { instituteId }, select: { id: true, name: true, subjectId: true } }),
-      // Teachers via User model
+      // All batches for this institute
+      db.batch.findMany({
+        where: { instituteId },
+        select: { id: true, name: true, subjectId: true },
+      }),
+      // Teachers for enrichment
       (async () => {
         const teacherRecords = await db.teacher.findMany({
           where: { instituteId },
@@ -92,106 +117,37 @@ export async function GET(request: NextRequest) {
         const userIds = teacherRecords.map((t) => t.userId).filter(Boolean);
         const teacherUserMap = new Map(teacherRecords.map((t) => [t.userId, t.id]));
         const users = userIds.length > 0
-          ? await db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, firstName: true, lastName: true } })
+          ? await db.user.findMany({
+              where: { id: { in: userIds } },
+              select: { id: true, firstName: true, lastName: true },
+            })
           : [];
-        return users.map((u) => ({ id: teacherUserMap.get(u.id), firstName: u.firstName, lastName: u.lastName }));
+        return users.map((u) => ({
+          id: teacherUserMap.get(u.id),
+          firstName: u.firstName,
+          lastName: u.lastName,
+        }));
       })(),
     ]);
 
-    // ── Phase 2: Revenue history (6 months, parallel) ───────────
-
-    const revenueQueries = Array.from({ length: 6 }, (_, i) => {
-      const mStart = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
-      const mEnd = new Date(now.getFullYear(), now.getMonth() - (5 - i) + 1, 1);
-      return db.payment.aggregate({
-        _sum: { amount: true },
-        where: { instituteId, status: "completed", recordedAt: { gte: mStart, lt: mEnd } },
-      }).then((r) => ({
-        month: mStart.toLocaleString("en-US", { month: "short" }),
-        revenue: r._sum.amount || 0,
-      }));
-    });
-    const revenueHistory = await Promise.all(revenueQueries);
-
-    // ── Phase 3: Compute stats from raw dues ────────────────────
-
-    let totalUnpaid = 0;
-    let totalUnpaidAmount = 0;
-    let totalOverdue = 0;
-    let totalOverdueAmount = 0;
-    let totalDueThisWeek = 0;
-    let totalDueThisWeekAmount = 0;
-
-    for (const d of unpaidPartialDues) {
-      const remaining = d.amount - d.amountPaid - d.waivedAmount;
-      totalUnpaid++;
-      totalUnpaidAmount += remaining;
-
-      if (d.dueDate < now) {
-        totalOverdue++;
-        totalOverdueAmount += remaining;
-      } else if (d.dueDate <= weekStart) {
-        totalDueThisWeek++;
-        totalDueThisWeekAmount += remaining;
-      }
-    }
-
-    // ── Phase 4: Upcoming/overdue dues for display ──────────────
-
-    // Get top overdue + due-this-week dues, enriched with student
-    const upcomingDueIds = unpaidPartialDues
-      .filter((d) => d.dueDate <= new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000))
-      .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
-      .slice(0, 10);
-
-    // Collect student IDs from both upcoming dues AND recent payments
-    const paymentStudentIds = [...new Set(recentPayments.map((p) => p.studentId).filter(Boolean))];
-    const dueStudentIds = [...new Set(upcomingDueIds.map((d) => d.studentId))];
-    const allStudentIds = [...new Set([...dueStudentIds, ...paymentStudentIds])];
-
-    const students = allStudentIds.length > 0
-      ? await db.student.findMany({
-          where: { id: { in: allStudentIds } },
-          select: { id: true, fullName: true, studentNumber: true },
-        })
-      : [];
-    const studentMap = new Map(students.map((s) => [s.id, s]));
-
-    // Enrich recentPayments with student data
-    const enrichedRecentPayments = recentPayments.map((p) => ({
-      ...p,
-      student: studentMap.get(p.studentId) || null,
-    }));
-
-    const upcomingDues = upcomingDueIds.map((d) => {
-      const remaining = d.amount - d.amountPaid - d.waivedAmount;
-      const isOverdue = d.dueDate < now;
-      return {
-        id: d.id,
-        studentId: d.studentId,
-        student: studentMap.get(d.studentId) || null,
-        description: d.description,
-        amount: d.amount,
-        remaining,
-        dueDate: d.dueDate.toISOString(),
-        displayStatus: isOverdue ? "overdue" : d.status,
-      };
-    });
-
-    // ── Phase 5: Enrich sessions and attendance ─────────────────
-
+    // Build lookup maps
     const batchMap = new Map(batches.map((b) => [b.id, b]));
-    const teacherMap = new Map(teachers.map((t) => [t.id]));
+    const teacherMap = new Map(teachers.map((t) => [t.id, t]));
 
+    // Get subjects for batch enrichment
     const subjectIds = [...new Set(batches.map((b) => b.subjectId).filter(Boolean))];
     const subjects = subjectIds.length > 0
-      ? await db.subject.findMany({ where: { id: { in: subjectIds } }, select: { id: true, name: true, color: true } })
+      ? await db.subject.findMany({
+          where: { id: { in: subjectIds } },
+          select: { id: true, name: true, color: true },
+        })
       : [];
     const subjectMap = new Map(subjects.map((s) => [s.id, s]));
 
-    const enrichSession = (s: Record<string, unknown>) => {
-      const batch = batchMap.get(s.batchId as string);
-      const teacher = teacherMap.get((s.teacherId as string) || "");
+    // Enrich sessions
+    const enrichSession = (s: any) => {
+      const batch = batchMap.get(s.batchId);
+      const teacher = teacherMap.get(s.teacherId || "");
       const subject = batch ? subjectMap.get(batch.subjectId) : null;
       return {
         ...s,
@@ -203,11 +159,35 @@ export async function GET(request: NextRequest) {
     const enrichedTodayClasses = todayClasses.map(enrichSession);
     const enrichedUpcomingSessions = upcomingSessions.map(enrichSession);
 
-    const totalAttendance = recentAttendance.reduce((sum, r) => sum + r._count.status, 0);
-    const presentCount = recentAttendance.find((r) => r.status === "present")?._count.status || 0;
-    const attendanceRate = totalAttendance > 0 ? Math.round((presentCount / totalAttendance) * 100) : 0;
+    // Calculate attendance rate
+    const totalAttendance = recentAttendance.reduce(
+      (sum, r) => sum + r._count.status,
+      0
+    );
+    const presentCount =
+      recentAttendance.find((r) => r.status === "present")?._count.status || 0;
+    const attendanceRate =
+      totalAttendance > 0 ? Math.round((presentCount / totalAttendance) * 100) : 0;
 
-    // ── Response ─────────────────────────────────────────────────
+    // Monthly revenue history (last 6 months)
+    const revenueHistory = [];
+    for (let i = 5; i >= 0; i--) {
+      const monthStart = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      const monthEnd = new Date(today.getFullYear(), today.getMonth() - i + 1, 1);
+      const monthRev = await db.payment.aggregate({
+        _sum: { amount: true },
+        where: {
+          instituteId,
+          status: "completed",
+          recordedAt: { gte: monthStart, lt: monthEnd },
+        },
+      });
+      const monthName = monthStart.toLocaleString("en-US", { month: "short" });
+      revenueHistory.push({
+        month: monthName,
+        revenue: monthRev._sum.amount || 0,
+      });
+    }
 
     return NextResponse.json({
       stats: {
@@ -217,19 +197,21 @@ export async function GET(request: NextRequest) {
         totalTeachers,
         monthlyRevenue: monthlyRevenue._sum.amount || 0,
         attendanceRate,
-        unpaidDues: { count: totalUnpaid, totalAmount: totalUnpaidAmount },
-        overdueDues: { count: totalOverdue, totalAmount: totalOverdueAmount },
-        todayPayments: { count: todayPaymentsData._count, totalAmount: todayPaymentsData._sum.amount || 0 },
-        newStudentsThisMonth,
+        unpaidDues: {
+          count: unpaidDues._count,
+          totalAmount: unpaidDues._sum.amount || 0,
+        },
       },
       todayClasses: enrichedTodayClasses,
       upcomingSessions: enrichedUpcomingSessions,
-      recentPayments: enrichedRecentPayments,
+      recentPayments,
       revenueHistory,
-      upcomingDues,
     });
-  } catch (error: unknown) {
+  } catch (error: any) {
     console.error("Dashboard stats error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }
