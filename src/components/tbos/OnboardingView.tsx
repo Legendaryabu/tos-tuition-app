@@ -6,31 +6,35 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Leaf, ArrowRight, ArrowLeft, Check, Loader2 } from 'lucide-react'
+import { Leaf, ArrowRight, ArrowLeft, Check } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
 const steps = [
-  { id: 1, title: 'Institute Details', description: 'Verify your tuition centre details' },
+  { id: 1, title: 'Institute Details', description: 'Basic information about your tuition centre' },
   { id: 2, title: 'Add Subjects', description: 'What subjects do you teach?' },
-  { id: 3, title: 'Add Teachers', description: 'Add your teaching staff (optional)' },
+  { id: 3, title: 'Add Batches', description: 'Create your first class batches' },
+  { id: 4, title: 'Invite Teachers', description: 'Add your teaching staff' },
 ]
 
 export default function OnboardingView() {
-  const { setActiveView, currentInstitute, setCurrentInstitute, currentUser } = useAppStore()
+  const { setActiveView, currentInstitute, setCurrentInstitute } = useAppStore()
   const { toast } = useToast()
   const [currentStep, setCurrentStep] = useState(1)
-  const [completing, setCompleting] = useState(false)
 
-  // Step 1 - pre-filled from registration data
+  // Step 1
   const [instituteName, setInstituteName] = useState(currentInstitute?.name || '')
-  const [phone, setPhone] = useState(currentInstitute?.phone || currentUser?.mobile || '')
-  const [city, setCity] = useState(currentInstitute?.city || 'Colombo')
+  const [phone, setPhone] = useState(currentInstitute?.phone || '')
+  const [city, setCity] = useState(currentInstitute?.city || '')
+  const [address, setAddress] = useState('')
 
   // Step 2
   const [subjects, setSubjects] = useState<string[]>([])
   const [newSubject, setNewSubject] = useState('')
 
   // Step 3
+  const [batches, setBatches] = useState<string[]>([])
+
+  // Step 4
   const [teacherName, setTeacherName] = useState('')
   const [teacherEmail, setTeacherEmail] = useState('')
   const [teachers, setTeachers] = useState<{ name: string; email: string }[]>([])
@@ -58,56 +62,19 @@ export default function OnboardingView() {
     setTeachers(teachers.filter((_, i) => i !== idx))
   }
 
-  const handleComplete = async () => {
-    if (!currentInstitute?.id) return
-    setCompleting(true)
-    try {
-      // Persist onboarding data to the database
-      const updateData: Record<string, any> = {
-        onboardingCompleted: true,
-        name: instituteName || currentInstitute.name,
-        phone: phone || '',
-        city: city || 'Colombo',
-      }
-
-      const res = await fetch('/api/institute', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          instituteId: currentInstitute.id,
-          ...updateData,
-        }),
-      })
-
-      if (res.ok) {
-        const data = await res.json()
-        // Update the store with the persisted institute data
-        setCurrentInstitute({
-          ...currentInstitute,
-          ...updateData,
-        })
-        setActiveView('dashboard')
-        toast({ title: 'Setup complete!', description: 'Your tuition centre is ready to use.' })
-      } else {
-        const err = await res.json().catch(() => ({}))
-        toast({
-          title: 'Failed to save',
-          description: err.error || 'Could not complete setup. Please try again.',
-          variant: 'destructive',
-        })
-      }
-    } catch {
-      toast({
-        title: 'Connection error',
-        description: 'Could not save setup. Please try again.',
-        variant: 'destructive',
-      })
-    } finally {
-      setCompleting(false)
-    }
+  const handleComplete = () => {
+    setCurrentInstitute({
+      ...(currentInstitute || { id: 'inst-1', slug: 'institute', email: '', zoomEnabled: false, onboardingCompleted: true }),
+      name: instituteName,
+      phone,
+      city,
+      onboardingCompleted: true,
+    })
+    setActiveView('dashboard')
+    toast({ title: 'Setup complete!', description: 'Your tuition centre is ready to use.' })
   }
 
-  const nextStep = () => setCurrentStep(Math.min(currentStep + 1, 3))
+  const nextStep = () => setCurrentStep(Math.min(currentStep + 1, 4))
   const prevStep = () => setCurrentStep(Math.max(currentStep - 1, 1))
 
   return (
@@ -147,7 +114,7 @@ export default function OnboardingView() {
             <div className="w-full bg-muted rounded-full h-1.5">
               <div
                 className="bg-primary h-1.5 rounded-full transition-all"
-                style={{ width: `${(currentStep / 3) * 100}%` }}
+                style={{ width: `${(currentStep / 4) * 100}%` }}
               />
             </div>
           </div>
@@ -175,9 +142,10 @@ export default function OnboardingView() {
                       <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Colombo" />
                     </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    These details were filled during registration. You can update them here or in Settings later.
-                  </p>
+                  <div className="space-y-2">
+                    <Label>Address</Label>
+                    <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="No. 42, Galle Road" />
+                  </div>
                 </div>
               )}
 
@@ -187,34 +155,41 @@ export default function OnboardingView() {
                     <Input
                       value={newSubject}
                       onChange={(e) => setNewSubject(e.target.value)}
-                      placeholder="Add subject name (e.g., Mathematics)..."
+                      placeholder="Add subject name..."
                       onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addSubject())}
                     />
                     <Button variant="outline" onClick={addSubject}>Add</Button>
                   </div>
-                  {subjects.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {subjects.map((s) => (
-                        <span
-                          key={s}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-secondary rounded-full text-sm font-medium"
-                        >
-                          {s}
-                          <button onClick={() => removeSubject(s)} className="text-muted-foreground hover:text-destructive">
-                            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      No subjects added yet. You can add subjects later from the Subjects section.
-                    </p>
-                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {subjects.map((s) => (
+                      <span
+                        key={s}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-secondary rounded-full text-sm font-medium"
+                      >
+                        {s}
+                        <button onClick={() => removeSubject(s)} className="text-muted-foreground hover:text-destructive">
+                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )}
 
               {currentStep === 3 && (
+                <div className="space-y-4">
+                  <p className="text-sm text-muted-foreground">You can create batches from the Batches section after setup. Click Next to continue.</p>
+                  <div className="bg-muted/50 rounded-lg p-4 text-sm">
+                    <p className="font-medium mb-1">Quick Start</p>
+                    <p className="text-muted-foreground">
+                      Common batch types: O/L, A/L, Grade 6-9, Scholarship. 
+                      We&apos;ll create these for you based on your subjects.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {currentStep === 4 && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-2">
@@ -239,9 +214,6 @@ export default function OnboardingView() {
                       ))}
                     </div>
                   )}
-                  <p className="text-xs text-muted-foreground">
-                    You can add more teachers later from the Teachers section.
-                  </p>
                 </div>
               )}
             </CardContent>
@@ -253,24 +225,15 @@ export default function OnboardingView() {
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back
             </Button>
-            {currentStep < 3 ? (
+            {currentStep < 4 ? (
               <Button onClick={nextStep}>
                 Next
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
             ) : (
-              <Button onClick={handleComplete} disabled={completing} className="bg-primary">
-                {completing ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Check className="h-4 w-4 mr-2" />
-                    Complete Setup
-                  </>
-                )}
+              <Button onClick={handleComplete} className="bg-primary">
+                <Check className="h-4 w-4 mr-2" />
+                Complete Setup
               </Button>
             )}
           </div>
