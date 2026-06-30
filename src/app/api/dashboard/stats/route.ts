@@ -99,9 +99,7 @@ export async function GET(request: NextRequest) {
         where: { instituteId },
         orderBy: { recordedAt: "desc" },
         take: 10,
-        include: {
-          student: { select: { id: true, fullName: true, studentNumber: true } },
-        },
+        select: { id: true, studentId: true, amount: true, currency: true, paymentMethod: true, recordedAt: true, status: true, referenceNumber: true },
       }),
       // All batches for this institute
       db.batch.findMany({
@@ -159,6 +157,20 @@ export async function GET(request: NextRequest) {
     const enrichedTodayClasses = todayClasses.map(enrichSession);
     const enrichedUpcomingSessions = upcomingSessions.map(enrichSession);
 
+    // Enrich recent payments with student data
+    const paymentStudentIds = [...new Set(recentPayments.map((p) => p.studentId).filter(Boolean))];
+    const paymentStudents = paymentStudentIds.length > 0
+      ? await db.student.findMany({
+          where: { id: { in: paymentStudentIds } },
+          select: { id: true, fullName: true, studentNumber: true },
+        })
+      : [];
+    const paymentStudentMap = new Map(paymentStudents.map((s) => [s.id, s]));
+    const enrichedPayments = recentPayments.map((p) => ({
+      ...p,
+      student: paymentStudentMap.get(p.studentId) || null,
+    }));
+
     // Calculate attendance rate
     const totalAttendance = recentAttendance.reduce(
       (sum, r) => sum + r._count.status,
@@ -204,7 +216,7 @@ export async function GET(request: NextRequest) {
       },
       todayClasses: enrichedTodayClasses,
       upcomingSessions: enrichedUpcomingSessions,
-      recentPayments,
+      recentPayments: enrichedPayments,
       revenueHistory,
     });
   } catch (error: any) {

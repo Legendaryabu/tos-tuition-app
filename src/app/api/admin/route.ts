@@ -28,18 +28,28 @@ export async function GET(request: NextRequest) {
           db.institute.findMany({
             orderBy: { createdAt: 'desc' },
             take: 5,
-            include: {
-              plan: { select: { name: true, slug: true } },
-            },
+            select: { id: true, name: true, slug: true, city: true, isActive: true, createdAt: true },
           }),
           db.activityLog.findMany({
             orderBy: { createdAt: 'desc' },
             take: 10,
-            include: {
-              causer: { select: { firstName: true, lastName: true, email: true } },
-            },
+            select: { id: true, description: true, subjectType: true, subjectId: true, causerId: true, createdAt: true },
           }),
         ])
+
+        // Enrich activity logs with causer names
+        const causerIds = [...new Set(recentActivity.map((a) => a.causerId).filter(Boolean))]
+        const causers = causerIds.length > 0
+          ? await db.user.findMany({
+              where: { id: { in: causerIds } },
+              select: { id: true, firstName: true, lastName: true, email: true },
+            })
+          : []
+        const causerMap = new Map(causers.map((c) => [c.id, c]))
+        const enrichedActivity = recentActivity.map((a) => ({
+          ...a,
+          causer: a.causerId ? causerMap.get(a.causerId) || null : null,
+        }))
 
         return NextResponse.json({
           totalInstitutes,
@@ -49,64 +59,97 @@ export async function GET(request: NextRequest) {
           totalTeachers,
           totalRevenue: revenueResult._sum.amount ?? 0,
           recentInstitutes,
-          recentActivity,
+          recentActivity: enrichedActivity,
         })
       }
 
       case 'institutes': {
         const institutes = await db.institute.findMany({
           orderBy: { createdAt: 'desc' },
-          include: {
-            plan: { select: { name: true, slug: true } },
-            owner: { select: { id: true, firstName: true, lastName: true, email: true } },
-            _count: {
-              select: {
-                students: true,
-                batches: true,
-                teachers: true,
-              },
-            },
-          },
+          select: { id: true, name: true, slug: true, city: true, email: true, phone: true, isActive: true, createdAt: true, ownerId: true },
         })
 
-        return NextResponse.json({ institutes })
+        // Enrich with owner data
+        const ownerIds = [...new Set(institutes.map((i) => i.ownerId).filter(Boolean))]
+        const owners = ownerIds.length > 0
+          ? await db.user.findMany({
+              where: { id: { in: ownerIds } },
+              select: { id: true, firstName: true, lastName: true, email: true },
+            })
+          : []
+        const ownerMap = new Map(owners.map((o) => [o.id, o]))
+
+        // Count students/teachers/batches per institute
+        const instituteIds = institutes.map((i) => i.id)
+        const [studentCounts, teacherCounts, batchCounts] = await Promise.all([
+          Promise.all(instituteIds.map((id) => db.student.count({ where: { instituteId: id } }))),
+          Promise.all(instituteIds.map((id) => db.teacher.count({ where: { instituteId: id } }))),
+          Promise.all(instituteIds.map((id) => db.batch.count({ where: { instituteId: id } }))),
+        ])
+
+        const enrichedInstitutes = institutes.map((inst, idx) => ({
+          ...inst,
+          owner: inst.ownerId ? ownerMap.get(inst.ownerId) || null : null,
+          _count: {
+            students: studentCounts[idx],
+            teachers: teacherCounts[idx],
+            batches: batchCounts[idx],
+          },
+        }))
+
+        return NextResponse.json({ institutes: enrichedInstitutes })
       }
 
       case 'users': {
         const users = await db.user.findMany({
           orderBy: { createdAt: 'desc' },
-          include: {
-            institute: { select: { id: true, name: true } },
+          select: {
+            id: true, firstName: true, lastName: true, email: true,
+            mobile: true, type: true, status: true, lastLoginAt: true,
+            createdAt: true, instituteId: true,
           },
         })
 
-        return NextResponse.json({
-          users: users.map((user) => ({
-            id: user.id,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            email: user.email,
-            mobile: user.mobile,
-            type: user.type,
-            status: user.status,
-            lastLoginAt: user.lastLoginAt,
-            createdAt: user.createdAt,
-            instituteId: user.instituteId,
-            institute: user.institute,
-          })),
-        })
+        // Enrich with institute names
+        const instIds = [...new Set(users.map((u) => u.instituteId).filter(Boolean))]
+        const insts = instIds.length > 0
+          ? await db.institute.findMany({
+              where: { id: { in: instIds } },
+              select: { id: true, name: true },
+            })
+          : []
+        const instMap = new Map(insts.map((i) => [i.id, i]))
+
+        const enrichedUsers = users.map((user) => ({
+          ...user,
+          institute: user.instituteId ? instMap.get(user.instituteId) || null : null,
+        }))
+
+        return NextResponse.json({ users: enrichedUsers })
       }
 
       case 'activity': {
         const activityLogs = await db.activityLog.findMany({
           orderBy: { createdAt: 'desc' },
           take: 100,
-          include: {
-            causer: { select: { firstName: true, lastName: true, email: true } },
-          },
+          select: { id: true, description: true, subjectType: true, subjectId: true, causerId: true, createdAt: true, ipAddress: true },
         })
 
-        return NextResponse.json({ activityLogs })
+        // Enrich with causer names
+        const causerIds = [...new Set(activityLogs.map((a) => a.causerId).filter(Boolean))]
+        const causers = causerIds.length > 0
+          ? await db.user.findMany({
+              where: { id: { in: causerIds } },
+              select: { id: true, firstName: true, lastName: true, email: true },
+            })
+          : []
+        const causerMap = new Map(causers.map((c) => [c.id, c]))
+        const enrichedLogs = activityLogs.map((a) => ({
+          ...a,
+          causer: a.causerId ? causerMap.get(a.causerId) || null : null,
+        }))
+
+        return NextResponse.json({ activityLogs: enrichedLogs })
       }
 
       default:
