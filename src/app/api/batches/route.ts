@@ -10,38 +10,23 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get("status");
     const classType = searchParams.get("classType");
     const gradeLevel = searchParams.get("gradeLevel");
-    const search = searchParams.get("search");
-    const page = parseInt(searchParams.get("page") || "1", 10);
-    const limit = parseInt(searchParams.get("limit") || "50", 10);
-    const skip = (page - 1) * limit;
 
     if (!instituteId) {
       return NextResponse.json({ error: "instituteId is required" }, { status: 400 });
     }
 
-    const where: Record<string, unknown> = { instituteId, status: { not: "archived" } };
+    const where: any = { instituteId };
 
     if (subjectId) where.subjectId = subjectId;
     if (teacherId) where.teacherId = teacherId;
     if (status) where.status = status;
     if (classType) where.classType = classType;
     if (gradeLevel) where.gradeLevel = gradeLevel;
-    if (search) {
-      where.OR = [
-        { name: { contains: search } },
-        { code: { contains: search } },
-      ];
-    }
 
-    const [total, batches] = await Promise.all([
-      db.batch.count({ where }),
-      db.batch.findMany({
-        where,
-        orderBy: { createdAt: "desc" },
-        skip,
-        take: limit,
-      }),
-    ]);
+    const batches = await db.batch.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+    });
 
     // Enrich with subject, teacher, branch, student count
     const subjectIds = [...new Set(batches.map((b) => b.subjectId).filter(Boolean))];
@@ -89,12 +74,7 @@ export async function GET(request: NextRequest) {
       _count: { students: countMap.get(b.id) || 0 },
     }));
 
-    const totalPages = Math.ceil(total / limit);
-
-    return NextResponse.json({
-      batches: enrichedBatches,
-      pagination: { page, limit, total, totalPages },
-    });
+    return NextResponse.json({ batches: enrichedBatches });
   } catch (error: any) {
     console.error("Batches list error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

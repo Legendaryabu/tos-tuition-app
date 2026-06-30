@@ -30,6 +30,7 @@ export async function GET(
       enrollments,
       sessions,
       timetableSlots,
+      halls,
       feeStructures,
       exams,
       examSubjects,
@@ -58,6 +59,9 @@ export async function GET(
         where: { batchId: id, isActive: true },
         orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
       }),
+      db.hall.findMany({
+        select: { id: true, name: true, capacity: true },
+      }),
       db.feeStructure.findMany({
         where: { batchId: id, isActive: true },
       }),
@@ -71,17 +75,6 @@ export async function GET(
       db.batchStudent.count({ where: { batchId: id, status: "active" } }),
       db.classSession.count({ where: { batchId: id } }),
     ]);
-
-    // Only fetch halls that are actually used by sessions/slots
-    const hallIds = [
-      ...new Set([
-        ...sessions.map((s) => s.hallId).filter(Boolean) as string[],
-        ...timetableSlots.map((s) => s.hallId).filter(Boolean) as string[],
-      ]),
-    ];
-    const halls = hallIds.length > 0
-      ? await db.hall.findMany({ where: { id: { in: hallIds } }, select: { id: true, name: true, capacity: true } })
-      : [];
 
     // Enrich sessions with teacher and hall
     const sessionTeacherIds = [...new Set(sessions.map((s) => s.teacherId).filter(Boolean))];
@@ -157,126 +150,6 @@ export async function GET(
     });
   } catch (error: any) {
     console.error("Batch detail error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  }
-}
-
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params;
-    const batch = await db.batch.findUnique({ where: { id } });
-
-    if (!batch) {
-      return NextResponse.json({ error: "Batch not found" }, { status: 404 });
-    }
-
-    const body = await request.json();
-    const {
-      name,
-      code,
-      description,
-      gradeLevel,
-      academicYear,
-      medium,
-      classType,
-      maxStudents,
-      monthlyFee,
-      registrationFee,
-      daysOfWeek,
-      startTime,
-      endTime,
-      typicalDurationMin,
-      onlinePlatform,
-      onlineMeetingUrl,
-      onlineMeetingId,
-      onlinePasscode,
-      whatsappGroupLink,
-      status,
-      isVisibleToStudents,
-      isEnrollmentOpen,
-      notes,
-      subjectId,
-      teacherId,
-      branchId,
-    } = body;
-
-    const updateData: Record<string, unknown> = {};
-
-    if (name !== undefined) updateData.name = name;
-    if (code !== undefined) updateData.code = code || null;
-    if (description !== undefined) updateData.description = description || null;
-    if (gradeLevel !== undefined) updateData.gradeLevel = gradeLevel || null;
-    if (academicYear !== undefined) updateData.academicYear = academicYear || null;
-    if (medium !== undefined) updateData.medium = medium;
-    if (classType !== undefined) updateData.classType = classType;
-    if (maxStudents !== undefined) updateData.maxStudents = maxStudents || null;
-    if (monthlyFee !== undefined) updateData.monthlyFee = monthlyFee || null;
-    if (registrationFee !== undefined) updateData.registrationFee = registrationFee || 0;
-    if (daysOfWeek !== undefined) updateData.daysOfWeek = JSON.stringify(daysOfWeek || []);
-    if (startTime !== undefined) updateData.startTime = startTime || null;
-    if (endTime !== undefined) updateData.endTime = endTime || null;
-    if (typicalDurationMin !== undefined) updateData.typicalDurationMin = typicalDurationMin || null;
-    if (onlinePlatform !== undefined) updateData.onlinePlatform = onlinePlatform || null;
-    if (onlineMeetingUrl !== undefined) updateData.onlineMeetingUrl = onlineMeetingUrl || null;
-    if (onlineMeetingId !== undefined) updateData.onlineMeetingId = onlineMeetingId || null;
-    if (onlinePasscode !== undefined) updateData.onlinePasscode = onlinePasscode || null;
-    if (whatsappGroupLink !== undefined) updateData.whatsappGroupLink = whatsappGroupLink || null;
-    if (status !== undefined) updateData.status = status;
-    if (isVisibleToStudents !== undefined) updateData.isVisibleToStudents = isVisibleToStudents;
-    if (isEnrollmentOpen !== undefined) updateData.isEnrollmentOpen = isEnrollmentOpen;
-    if (notes !== undefined) updateData.notes = notes || null;
-    if (subjectId !== undefined) updateData.subjectId = subjectId;
-    if (teacherId !== undefined) updateData.teacherId = teacherId || null;
-    if (branchId !== undefined) updateData.branchId = branchId || null;
-
-    const updatedBatch = await db.batch.update({
-      where: { id },
-      data: updateData,
-    });
-
-    return NextResponse.json(updatedBatch);
-  } catch (error: any) {
-    console.error("Batch update error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  }
-}
-
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params;
-    const batch = await db.batch.findUnique({ where: { id } });
-
-    if (!batch) {
-      return NextResponse.json({ error: "Batch not found" }, { status: 404 });
-    }
-
-    // Soft delete: archive the batch
-    const updatedBatch = await db.batch.update({
-      where: { id },
-      data: { status: "archived" },
-    });
-
-    // Deactivate all active BatchStudent records
-    await db.batchStudent.updateMany({
-      where: { batchId: id, status: "active" },
-      data: { status: "inactive" },
-    });
-
-    // Update currentStudents count to 0
-    await db.batch.update({
-      where: { id },
-      data: { currentStudents: 0 },
-    });
-
-    return NextResponse.json(updatedBatch);
-  } catch (error: any) {
-    console.error("Batch delete error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
