@@ -28,40 +28,18 @@ export async function GET(request: NextRequest) {
           db.institute.findMany({
             orderBy: { createdAt: 'desc' },
             take: 5,
+            include: {
+              plan: { select: { name: true, slug: true } },
+            },
           }),
           db.activityLog.findMany({
             orderBy: { createdAt: 'desc' },
             take: 10,
+            include: {
+              causer: { select: { firstName: true, lastName: true, email: true } },
+            },
           }),
         ])
-
-        // Enrich recent institutes with plan and owner info
-        const planIds = [...new Set(recentInstitutes.map(i => i.planId).filter(Boolean))]
-        const ownerIds = [...new Set(recentInstitutes.map(i => i.ownerId).filter(Boolean))]
-        const [plans, owners] = await Promise.all([
-          planIds.length > 0 ? db.plan.findMany({ where: { id: { in: planIds } } }) : [],
-          ownerIds.length > 0 ? db.user.findMany({ where: { id: { in: ownerIds } }, select: { id: true, firstName: true, lastName: true, email: true } }) : [],
-        ])
-        const planMap = new Map(plans.map(p => [p.id, p]))
-        const ownerMap = new Map(owners.map(o => [o.id, o]))
-
-        const enrichedInstitutes = recentInstitutes.map(inst => ({
-          ...inst,
-          plan: planMap.get(inst.planId) ? { name: planMap.get(inst.planId)!.name, slug: planMap.get(inst.planId)!.slug } : null,
-          owner: ownerMap.get(inst.ownerId) || null,
-        }))
-
-        // Enrich activity logs with causer info
-        const causerIds = [...new Set(recentActivity.map(a => a.causerId).filter(Boolean))]
-        const causers = causerIds.length > 0
-          ? await db.user.findMany({ where: { id: { in: causerIds } }, select: { id: true, firstName: true, lastName: true, email: true } })
-          : []
-        const causerMap = new Map(causers.map(c => [c.id, c]))
-
-        const enrichedActivity = recentActivity.map(log => ({
-          ...log,
-          causer: log.causerId ? causerMap.get(log.causerId) || null : null,
-        }))
 
         return NextResponse.json({
           totalInstitutes,
@@ -70,119 +48,65 @@ export async function GET(request: NextRequest) {
           totalStudents,
           totalTeachers,
           totalRevenue: revenueResult._sum.amount ?? 0,
-          recentInstitutes: enrichedInstitutes,
-          recentActivity: enrichedActivity,
+          recentInstitutes,
+          recentActivity,
         })
       }
 
       case 'institutes': {
         const institutes = await db.institute.findMany({
           orderBy: { createdAt: 'desc' },
-        })
-
-        // Enrich with plan, owner, and counts
-        const planIds = [...new Set(institutes.map(i => i.planId).filter(Boolean))]
-        const ownerIds = [...new Set(institutes.map(i => i.ownerId).filter(Boolean))]
-        const [plans, owners] = await Promise.all([
-          planIds.length > 0 ? db.plan.findMany({ where: { id: { in: planIds } } }) : [],
-          ownerIds.length > 0 ? db.user.findMany({ where: { id: { in: ownerIds } }, select: { id: true, firstName: true, lastName: true, email: true } }) : [],
-        ])
-        const planMap = new Map(plans.map(p => [p.id, p]))
-        const ownerMap = new Map(owners.map(o => [o.id, o]))
-
-        // Get counts for each institute
-        const instituteIds = institutes.map(i => i.id)
-        const studentCounts = await db.student.groupBy({
-          by: ['instituteId'],
-          where: { instituteId: { in: instituteIds } },
-          _count: { id: true },
-        })
-        const batchCounts = await db.batch.groupBy({
-          by: ['instituteId'],
-          where: { instituteId: { in: instituteIds } },
-          _count: { id: true },
-        })
-        const teacherCounts = await db.teacher.groupBy({
-          by: ['instituteId'],
-          where: { instituteId: { in: instituteIds } },
-          _count: { id: true },
-        })
-
-        const studentCountMap = new Map(studentCounts.map(c => [c.instituteId, c._count.id]))
-        const batchCountMap = new Map(batchCounts.map(c => [c.instituteId, c._count.id]))
-        const teacherCountMap = new Map(teacherCounts.map(c => [c.instituteId, c._count.id]))
-
-        const enriched = institutes.map(inst => ({
-          id: inst.id,
-          name: inst.name,
-          slug: inst.slug,
-          city: inst.city,
-          district: inst.district,
-          email: inst.email,
-          phone: inst.phone,
-          isActive: inst.isActive,
-          onboardingCompleted: inst.onboardingCompleted,
-          createdAt: inst.createdAt,
-          plan: planMap.get(inst.planId) ? { name: planMap.get(inst.planId)!.name, slug: planMap.get(inst.planId)!.slug } : null,
-          owner: ownerMap.get(inst.ownerId) || null,
-          _count: {
-            students: studentCountMap.get(inst.id) ?? 0,
-            batches: batchCountMap.get(inst.id) ?? 0,
-            teachers: teacherCountMap.get(inst.id) ?? 0,
+          include: {
+            plan: { select: { name: true, slug: true } },
+            owner: { select: { id: true, firstName: true, lastName: true, email: true } },
+            _count: {
+              select: {
+                students: true,
+                batches: true,
+                teachers: true,
+              },
+            },
           },
-        }))
+        })
 
-        return NextResponse.json({ institutes: enriched })
+        return NextResponse.json({ institutes })
       }
 
       case 'users': {
         const users = await db.user.findMany({
           orderBy: { createdAt: 'desc' },
+          include: {
+            institute: { select: { id: true, name: true } },
+          },
         })
 
-        // Enrich with institute info
-        const instituteIds = [...new Set(users.map(u => u.instituteId).filter(Boolean))]
-        const institutes = instituteIds.length > 0
-          ? await db.institute.findMany({ where: { id: { in: instituteIds } }, select: { id: true, name: true } })
-          : []
-        const instituteMap = new Map(institutes.map(i => [i.id, i]))
-
-        const enriched = users.map(user => ({
-          id: user.id,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email,
-          mobile: user.mobile,
-          type: user.type,
-          status: user.status,
-          lastLoginAt: user.lastLoginAt,
-          createdAt: user.createdAt,
-          instituteId: user.instituteId,
-          institute: user.instituteId ? instituteMap.get(user.instituteId) || null : null,
-        }))
-
-        return NextResponse.json({ users: enriched })
+        return NextResponse.json({
+          users: users.map((user) => ({
+            id: user.id,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            email: user.email,
+            mobile: user.mobile,
+            type: user.type,
+            status: user.status,
+            lastLoginAt: user.lastLoginAt,
+            createdAt: user.createdAt,
+            instituteId: user.instituteId,
+            institute: user.institute,
+          })),
+        })
       }
 
       case 'activity': {
         const activityLogs = await db.activityLog.findMany({
           orderBy: { createdAt: 'desc' },
           take: 100,
+          include: {
+            causer: { select: { firstName: true, lastName: true, email: true } },
+          },
         })
 
-        // Enrich with causer info
-        const causerIds = [...new Set(activityLogs.map(a => a.causerId).filter(Boolean))]
-        const causers = causerIds.length > 0
-          ? await db.user.findMany({ where: { id: { in: causerIds } }, select: { id: true, firstName: true, lastName: true, email: true } })
-          : []
-        const causerMap = new Map(causers.map(c => [c.id, c]))
-
-        const enriched = activityLogs.map(log => ({
-          ...log,
-          causer: log.causerId ? causerMap.get(log.causerId) || null : null,
-        }))
-
-        return NextResponse.json({ activityLogs: enriched })
+        return NextResponse.json({ activityLogs })
       }
 
       default:
