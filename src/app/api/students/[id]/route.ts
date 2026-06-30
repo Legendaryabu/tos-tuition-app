@@ -119,13 +119,24 @@ export async function GET(
 
     // Get teachers for batches
     const teacherIds = [...new Set(batches.map((b) => b.teacherId).filter(Boolean))];
-    const teachers =
-      teacherIds.length > 0
-        ? await db.teacher.findMany({
-            where: { id: { in: teacherIds } },
-            select: { id: true, firstName: true, lastName: true },
-          })
+    let teachers: Array<{ id: string; firstName: string; lastName: string }> = [];
+    if (teacherIds.length > 0) {
+      const tRecords = await db.teacher.findMany({
+        where: { id: { in: teacherIds } },
+        select: { id: true, userId: true },
+      });
+      const tUserIds = tRecords.map((t) => t.userId).filter(Boolean);
+      const tUsers = tUserIds.length > 0
+        ? await db.user.findMany({ where: { id: { in: tUserIds } }, select: { id: true, firstName: true, lastName: true } })
         : [];
+      const tUserMap = new Map(tUsers.map((u) => [u.id, u]));
+      const tRecordMap = new Map(tRecords.map((t) => [t.id, t.userId]));
+      teachers = tRecords.map((t) => ({
+        id: t.id,
+        firstName: t.userId ? tUserMap.get(t.userId)?.firstName || "" : "",
+        lastName: t.userId ? tUserMap.get(t.userId)?.lastName || "" : "",
+      }));
+    }
     const teacherMap = new Map(teachers.map((t) => [t.id, t]));
 
     const activeBatches = batchEnrollments

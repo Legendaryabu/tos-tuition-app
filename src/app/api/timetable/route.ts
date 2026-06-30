@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     const hallIds = [...new Set(slots.map((s) => s.hallId).filter(Boolean))];
     const branchIds = [...new Set(slots.map((s) => s.branchId).filter(Boolean))];
 
-    const [batches, teachers, halls, branches, subjects] = await Promise.all([
+    const [batches, teacherRecords, halls, branches, subjects] = await Promise.all([
       batchIds.length > 0
         ? db.batch.findMany({
             where: { id: { in: batchIds } },
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
       teacherIds.length > 0
         ? db.teacher.findMany({
             where: { id: { in: teacherIds } },
-            select: { id: true, firstName: true, lastName: true },
+            select: { id: true, userId: true },
           })
         : [],
       hallIds.length > 0
@@ -54,10 +54,22 @@ export async function GET(request: NextRequest) {
     ]);
 
     const batchMap = new Map(batches.map((b) => [b.id, b]));
-    const teacherMap = new Map(teachers.map((t) => [t.id, t]));
     const hallMap = new Map(halls.map((h) => [h.id, h]));
     const branchMap = new Map(branches.map((b) => [b.id, b]));
     const subjectMap = new Map(subjects.map((s) => [s.id, s]));
+
+    // Resolve teacher names via User model
+    const tUserIds = teacherRecords.map((t) => t.userId).filter(Boolean);
+    const tUsers = tUserIds.length > 0
+      ? await db.user.findMany({ where: { id: { in: tUserIds } }, select: { id: true, firstName: true, lastName: true } })
+      : [];
+    const tUserMap = new Map(tUsers.map((u) => [u.id, u]));
+    const teachers = teacherRecords.map((t) => ({
+      id: t.id,
+      firstName: t.userId ? tUserMap.get(t.userId)?.firstName || "" : "",
+      lastName: t.userId ? tUserMap.get(t.userId)?.lastName || "" : "",
+    }));
+    const teacherMap = new Map(teachers.map((t) => [t.id, t]));
 
     const enrichedSlots = slots.map((s) => {
       const batch = batchMap.get(s.batchId);

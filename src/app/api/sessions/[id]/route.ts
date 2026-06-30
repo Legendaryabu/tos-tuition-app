@@ -17,7 +17,7 @@ export async function GET(
     // Fetch related data in parallel
     const [
       batch,
-      teacher,
+      teacherRecord,
       hall,
       branch,
       zoomMeeting,
@@ -28,7 +28,7 @@ export async function GET(
       session.teacherId
         ? db.teacher.findUnique({
             where: { id: session.teacherId },
-            select: { id: true, firstName: true, lastName: true, profilePhoto: true },
+            select: { id: true, userId: true },
           })
         : null,
       session.hallId
@@ -48,6 +48,18 @@ export async function GET(
     const subject = batch?.subjectId
       ? await db.subject.findUnique({ where: { id: batch.subjectId } })
       : null;
+
+    // Resolve teacher name from User model
+    let teacher = null;
+    if (teacherRecord && teacherRecord.userId) {
+      const teacherUser = await db.user.findFirst({
+        where: { id: teacherRecord.userId },
+        select: { firstName: true, lastName: true, profilePhoto: true },
+      });
+      if (teacherUser) {
+        teacher = { id: teacherRecord.id, ...teacherUser };
+      }
+    }
 
     // Get batch students for attendance marking
     const batchStudents = await db.batchStudent.findMany({

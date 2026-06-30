@@ -34,18 +34,30 @@ export async function GET(request: NextRequest) {
     const teacherIds = [...new Set(meetings.map((m) => m.teacherId).filter(Boolean))];
     const sessionIds = [...new Set(meetings.map((m) => m.classSessionId).filter(Boolean))];
 
-    const [batches, teachers, sessions, subjects] = await Promise.all([
+    const [batches, teacherRecords, sessions, subjects] = await Promise.all([
       batchIds.length > 0
         ? db.batch.findMany({ where: { id: { in: batchIds } }, select: { id: true, name: true, subjectId: true } })
         : [],
       teacherIds.length > 0
-        ? db.teacher.findMany({ where: { id: { in: teacherIds } }, select: { id: true, firstName: true, lastName: true } })
+        ? db.teacher.findMany({ where: { id: { in: teacherIds } }, select: { id: true, userId: true } })
         : [],
       sessionIds.length > 0
         ? db.classSession.findMany({ where: { id: { in: sessionIds } }, select: { id: true, sessionDate: true, topic: true } })
         : [],
       db.subject.findMany({ select: { id: true, name: true, color: true } }),
     ]);
+
+    // Resolve teacher names via User model
+    const tUserIds = teacherRecords.map((t) => t.userId).filter(Boolean);
+    const tUsers = tUserIds.length > 0
+      ? await db.user.findMany({ where: { id: { in: tUserIds } }, select: { id: true, firstName: true, lastName: true } })
+      : [];
+    const tUserMap = new Map(tUsers.map((u) => [u.id, u]));
+    const teachers = teacherRecords.map((t) => ({
+      id: t.id,
+      firstName: t.userId ? tUserMap.get(t.userId)?.firstName || "" : "",
+      lastName: t.userId ? tUserMap.get(t.userId)?.lastName || "" : "",
+    }));
 
     const batchMap = new Map(batches.map((b) => [b.id, b]));
     const teacherMap = new Map(teachers.map((t) => [t.id, t]));

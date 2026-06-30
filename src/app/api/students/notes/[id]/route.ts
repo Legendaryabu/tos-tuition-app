@@ -11,23 +11,26 @@ export async function GET(
 
     const note = await db.studentNote.findUnique({
       where: { id },
-      include: {
-        student: {
-          select: {
-            id: true,
-            fullName: true,
-            studentNumber: true,
-            instituteId: true,
-          },
-        },
-      },
     });
 
     if (!note) {
       return NextResponse.json({ error: "Note not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ note });
+    // Get student data separately (no Prisma relation exists)
+    const student = note.studentId
+      ? await db.student.findUnique({
+          where: { id: note.studentId },
+          select: {
+            id: true,
+            fullName: true,
+            studentNumber: true,
+            instituteId: true,
+          },
+        })
+      : null;
+
+    return NextResponse.json({ note: { ...note, student } });
   } catch (error: any) {
     console.error("Student note detail error:", error);
     return NextResponse.json(
