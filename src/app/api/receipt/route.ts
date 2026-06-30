@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
+// GET /api/receipt?paymentId=XXX&instituteId=XXX
+// Find receipt by paymentId
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -14,75 +16,26 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const receipt = await db.receipt.findUnique({
-      where: { paymentId },
+    const receipt = await db.receipt.findFirst({
+      where: { paymentId, instituteId },
     });
 
     if (!receipt) {
       return NextResponse.json({ receipt: null });
     }
 
-    // Fetch related data for enrichment (allocations first, then fee dues depend on them)
-    const [payment, student, institute, allocations, generator] =
-      await Promise.all([
-        db.payment.findUnique({
-          where: { id: paymentId },
-        }),
-        db.student.findUnique({
-          where: { id: receipt.studentId },
-          select: {
-            id: true,
-            fullName: true,
-            studentNumber: true,
-            mobile: true,
-          },
-        }),
-        db.institute.findUnique({
-          where: { id: instituteId },
-          select: {
-            id: true,
-            name: true,
-            phone: true,
-            email: true,
-            city: true,
-            district: true,
-            addressLine1: true,
-          },
-        }),
-        db.paymentAllocation.findMany({
-          where: { paymentId },
-        }),
-        db.user.findUnique({
-          where: { id: receipt.generatedBy },
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            preferredName: true,
-          },
-        }),
-      ]);
-
-    // Fetch fee dues for allocations
-    const dueIds = allocations.map((a) => a.feeDueId).filter(Boolean);
-    const feeDues =
-      dueIds.length > 0
-        ? await db.feeDue.findMany({
-            where: { id: { in: dueIds } },
-            select: { id: true, description: true },
-          })
-        : [];
-
-    const dueMap = new Map(feeDues.map((d) => [d.id, d]));
-
-    const enrichedAllocations = allocations.map((a) => ({
-      ...a,
-      feeDue: dueMap.get(a.feeDueId) || null,
-    }));
-
-    const generatedByName = generator
-      ? generator.preferredName || `${generator.firstName} ${generator.lastName}`
-      : null;
+    // Fetch related data separately (Receipt model uses plain FK fields, no Prisma relations)
+    const [payment, student, institute] = await Promise.all([
+      db.payment.findUnique({ where: { id: receipt.paymentId } }),
+      db.student.findUnique({
+        where: { id: receipt.studentId },
+        select: { studentNumber: true, fullName: true, mobile: true, email: true },
+      }),
+      db.institute.findUnique({
+        where: { id: receipt.instituteId },
+        select: { name: true, email: true, phone: true, city: true, addressLine1: true, receiptPrefix: true },
+      }),
+    ]);
 
     return NextResponse.json({
       receipt: {
@@ -90,38 +43,55 @@ export async function GET(request: NextRequest) {
         payment,
         student,
         institute,
-        allocations: enrichedAllocations,
-        generatedByName,
       },
     });
-  } catch (error: unknown) {
-    console.error("Receipt fetch error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  } catch (error: any) {
+    console.error("Receipt lookup error:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }
 
+// POST /api/receipt
+// Generate a new receipt for a payment
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { paymentId, instituteId, generatedBy } = body;
 
-    if (!paymentId || !instituteId || !generatedBy) {
+    if (!paymentId || !instituteId) {
       return NextResponse.json(
-        { error: "paymentId, instituteId, and generatedBy are required" },
+        { error: "paymentId and instituteId are required" },
         { status: 400 }
       );
     }
 
     // Check if receipt already exists for this payment
-    const existing = await db.receipt.findUnique({
+    const existing = await db.receipt.findFirst({
       where: { paymentId },
     });
 
     if (existing) {
-      return NextResponse.json({ error: "Receipt already exists for this payment" }, { status: 409 });
+      // Return existing receipt with full data
+      const [payment, student, institute] = await Promise.all([
+        db.payment.findUnique({ where: { id: existing.paymentId } }),
+        db.student.findUnique({
+          where: { id: existing.studentId },
+          select: { studentNumber: true, fullName: true, mobile: true, email: true },
+        }),
+        db.institute.findUnique({
+          where: { id: existing.instituteId },
+          select: { name: true, email: true, phone: true, city: true, addressLine1: true, receiptPrefix: true },
+        }),
+      ]);
+      return NextResponse.json({
+        receipt: { ...existing, payment, student, institute },
+      });
     }
 
-    // Get payment details
+    // Look up the payment
     const payment = await db.payment.findUnique({
       where: { id: paymentId },
     });
@@ -130,15 +100,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Payment not found" }, { status: 404 });
     }
 
-    // Generate receipt number WITH dash: RCP-0001
-    const inst = await db.institute.findUnique({
+    if (payment.instituteId !== instituteId) {
+      return NextResponse.json({ error: "Institute mismatch" }, { status: 403 });
+    }
+
+    // Get institute for receipt prefix
+    const institute = await db.institute.findUnique({
       where: { id: instituteId },
-      select: { receiptPrefix: true },
+      select: { receiptPrefix: true, name: true, email: true, phone: true, city: true, addressLine1: true },
     });
 
+    // Generate receipt number: prefix + dash + sequential number (e.g., RCP-0001)
     const receiptCount = await db.receipt.count({ where: { instituteId } });
-    const receiptNumber = `${inst?.receiptPrefix || "RCP"}-${String(receiptCount + 1).padStart(4, "0")}`;
+    const prefix = institute?.receiptPrefix || "RCP";
+    const receiptNumber = `${prefix}-${String(receiptCount + 1).padStart(4, "0")}`;
 
+    // Get student data
+    const student = await db.student.findUnique({
+      where: { id: payment.studentId },
+      select: { studentNumber: true, fullName: true, mobile: true, email: true },
+    });
+
+    // Create the receipt
     const receipt = await db.receipt.create({
       data: {
         instituteId,
@@ -147,13 +130,18 @@ export async function POST(request: NextRequest) {
         receiptNumber,
         totalAmount: payment.amount,
         paymentMethod: payment.paymentMethod,
-        generatedBy,
+        generatedBy: generatedBy || "system",
       },
     });
 
-    return NextResponse.json({ receipt }, { status: 201 });
-  } catch (error: unknown) {
-    console.error("Receipt create error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({
+      receipt: { ...receipt, payment, student, institute },
+    }, { status: 201 });
+  } catch (error: any) {
+    console.error("Receipt creation error:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }
