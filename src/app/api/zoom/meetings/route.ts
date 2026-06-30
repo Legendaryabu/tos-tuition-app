@@ -39,15 +39,7 @@ export async function GET(request: NextRequest) {
         ? db.batch.findMany({ where: { id: { in: batchIds } }, select: { id: true, name: true, subjectId: true } })
         : [],
       teacherIds.length > 0
-        ? (async () => {
-            const tRecords = await db.teacher.findMany({ where: { id: { in: teacherIds } }, select: { id: true, userId: true } })
-            const uIds = tRecords.map((t) => t.userId).filter(Boolean)
-            const users = uIds.length > 0
-              ? await db.user.findMany({ where: { id: { in: uIds } }, select: { id: true, firstName: true, lastName: true } })
-              : []
-            const tMap = new Map(tRecords.map((t) => [t.userId, t.id]))
-            return users.map((u) => ({ id: tMap.get(u.id), firstName: u.firstName, lastName: u.lastName }))
-          })()
+        ? db.teacher.findMany({ where: { id: { in: teacherIds } }, select: { id: true, firstName: true, lastName: true } })
         : [],
       sessionIds.length > 0
         ? db.classSession.findMany({ where: { id: { in: sessionIds } }, select: { id: true, sessionDate: true, topic: true } })
