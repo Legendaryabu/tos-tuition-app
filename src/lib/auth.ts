@@ -8,6 +8,8 @@ const JWT_SECRET = new TextEncoder().encode(
 )
 const JWT_EXPIRY = '7d' // 7 days
 
+export const COOKIE_NAME = 'tbos-token'
+
 // ── Password Hashing ──────────────────────────────────────────────────────
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 12)
