@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAppStore } from '@/lib/store'
 import { useToast } from '@/hooks/use-toast'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -191,10 +191,12 @@ export default function SuperAdminView() {
   const [sortDir, setSortDir] = useState<SortDir>('asc')
 
   // --- Data Fetching ---
+  const loadingRef = useRef<Record<string, boolean>>({})
 
   const fetchTabData = useCallback(
     async (tab: string) => {
-      if (loading[tab]) return
+      if (loadingRef.current[tab]) return
+      loadingRef.current[tab] = true
       setLoading((prev) => ({ ...prev, [tab]: true }))
       try {
         const res = await fetch(`/api/admin?tab=${tab}`)
@@ -206,10 +208,10 @@ export default function SuperAdminView() {
             setStats(data)
             break
           case 'institutes':
-            setInstitutes(data)
+            setInstitutes(data.institutes || [])
             break
           case 'users':
-            setUsers(data)
+            setUsers(data.users || [])
             break
           case 'activity':
             setActivityLogs(data)
@@ -218,10 +220,11 @@ export default function SuperAdminView() {
       } catch {
         toast({ title: 'Error', description: `Failed to load ${tab} data`, variant: 'destructive' })
       } finally {
+        loadingRef.current[tab] = false
         setLoading((prev) => ({ ...prev, [tab]: false }))
       }
     },
-    [loading, toast]
+    [toast]
   )
 
   useEffect(() => {
@@ -339,7 +342,7 @@ export default function SuperAdminView() {
   const filteredUsers = sortData(filterData(users, searchQuery), 'firstName' as keyof User)
 
   function formatCurrency(amount: number) {
-    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount)
+    return `Rs. ${amount.toLocaleString('en-LK')}`
   }
 
   function formatDate(dateStr: string | null) {
@@ -374,10 +377,10 @@ export default function SuperAdminView() {
     }
 
     const statCards = [
-      { label: 'Total Institutes', value: stats?.totalInstitutes ?? 0, icon: Building2, color: 'text-blue-600 bg-blue-50' },
-      { label: 'Total Users', value: stats?.totalUsers ?? 0, icon: Users, color: 'text-purple-600 bg-purple-50' },
-      { label: 'Total Students', value: stats?.totalStudents ?? 0, icon: GraduationCap, color: 'text-emerald-600 bg-emerald-50' },
-      { label: 'Total Revenue', value: formatCurrency(stats?.totalRevenue ?? 0), icon: DollarSign, color: 'text-amber-600 bg-amber-50' },
+      { label: 'Total Institutes', value: stats?.totalInstitutes ?? 0, icon: Building2, color: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20' },
+      { label: 'Total Users', value: stats?.totalUsers ?? 0, icon: Users, color: 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20' },
+      { label: 'Total Students', value: stats?.totalStudents ?? 0, icon: GraduationCap, color: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20' },
+      { label: 'Total Revenue', value: formatCurrency(stats?.totalRevenue ?? 0), icon: DollarSign, color: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20' },
     ]
 
     return (

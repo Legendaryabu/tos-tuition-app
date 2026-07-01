@@ -93,17 +93,17 @@ const ITEMS_PER_PAGE = 10
 const MONTH_NAMES = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
 const STATUS_BADGE_CLASSES: Record<string, string> = {
-  unpaid: 'bg-amber-100 text-amber-700',
-  overdue: 'bg-red-100 text-red-700',
-  partial: 'bg-sky-100 text-sky-700',
-  paid: 'bg-emerald-100 text-emerald-700',
+  unpaid: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  overdue: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  partial: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
+  paid: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
 }
 
 const ATTENDANCE_COLORS: Record<string, string> = {
-  present: 'bg-emerald-100 text-emerald-700',
-  absent: 'bg-red-100 text-red-700',
-  late: 'bg-amber-100 text-amber-700',
-  excused: 'bg-sky-100 text-sky-700',
+  present: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+  absent: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  late: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  excused: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
 }
 
 const METHOD_LABELS: Record<string, string> = {
@@ -387,7 +387,7 @@ export default function StudentDetailView() {
             <div className="flex-1">
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
                 <h1 className="text-xl font-bold">{student.fullName}</h1>
-                <Badge className={student.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}>
+                <Badge className={student.status === 'active' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}>
                   {student.status}
                 </Badge>
               </div>
@@ -469,7 +469,7 @@ export default function StudentDetailView() {
                         {batch.teacher ? ` \u00b7 ${batch.teacher.firstName} ${batch.teacher.lastName}` : ''}
                       </p>
                     </div>
-                    <Badge className="bg-emerald-100 text-emerald-700 text-xs">active</Badge>
+                    <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 text-xs">active</Badge>
                   </CardContent>
                 </Card>
               ))}
@@ -489,18 +489,18 @@ export default function StudentDetailView() {
           {/* Summary + Record Payment button */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <div className="flex gap-3 flex-1">
-              <div className="flex-1 bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
-                <p className="text-xs text-emerald-600 font-medium">Total Paid</p>
-                <p className="text-lg font-bold text-emerald-700">{formatLKR(student.totalPaid)}</p>
+              <div className="flex-1 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg p-3 text-center">
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Total Paid</p>
+                <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400">{formatLKR(student.totalPaid)}</p>
               </div>
-              <div className={`flex-1 rounded-lg p-3 text-center border ${student.outstandingBalance > 0 ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-200'}`}>
+              <div className={`flex-1 rounded-lg p-3 text-center border ${student.outstandingBalance > 0 ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'}`}>
                 <p className={`text-xs font-medium ${student.outstandingBalance > 0 ? 'text-red-600' : 'text-emerald-600'}`}>Outstanding</p>
-                <p className={`text-lg font-bold ${student.outstandingBalance > 0 ? 'text-red-700' : 'text-emerald-700'}`}>{formatLKR(student.outstandingBalance)}</p>
+                <p className={`text-lg font-bold ${student.outstandingBalance > 0 ? 'text-red-700 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400'}`}>{formatLKR(student.outstandingBalance)}</p>
               </div>
               {overdueCount > 0 && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
-                  <p className="text-xs text-red-600 font-medium">Overdue</p>
-                  <p className="text-lg font-bold text-red-700">{overdueCount}</p>
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-center">
+                  <p className="text-xs text-red-600 dark:text-red-400 font-medium">Overdue</p>
+                  <p className="text-lg font-bold text-red-700 dark:text-red-400">{overdueCount}</p>
                 </div>
               )}
             </div>
@@ -576,7 +576,7 @@ export default function StudentDetailView() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="text-xs h-7 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                              className="text-xs h-7 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
                               onClick={() => {
                                 setQuickPayDue(fee)
                                 setQuickPayAmount(String(remaining > 0 ? remaining : fee.amount))
@@ -657,8 +657,8 @@ export default function StudentDetailView() {
                           <p className="text-xs text-muted-foreground">{formatDateTime(p.recordedAt)}</p>
                         </div>
                         <div className="flex items-center gap-3">
-                          <span className="text-sm font-semibold text-emerald-700">{formatLKR(p.amount)}</span>
-                          <Badge className={`text-xs ${p.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
+                          <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">{formatLKR(p.amount)}</span>
+                          <Badge className={`text-xs ${p.status === 'completed' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}>
                             {p.status}
                           </Badge>
                         </div>
@@ -716,7 +716,7 @@ export default function StudentDetailView() {
                           </p>
                         </div>
                       </div>
-                      <Badge className={`text-xs shrink-0 ${ATTENDANCE_COLORS[record.status] || 'bg-gray-100 text-gray-600'}`}>
+                      <Badge className={`text-xs shrink-0 ${ATTENDANCE_COLORS[record.status] || 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}>
                         {record.status}
                       </Badge>
                     </div>
@@ -792,8 +792,8 @@ export default function StudentDetailView() {
           </DialogHeader>
           <div className="space-y-4">
             {student?.outstandingBalance > 0 && (
-              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
-                <p className="text-sm text-amber-700">
+              <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3">
+                <p className="text-sm text-amber-700 dark:text-amber-400">
                   Outstanding balance: <span className="font-bold">{formatLKR(student.outstandingBalance)}</span>
                 </p>
               </div>

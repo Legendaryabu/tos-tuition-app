@@ -64,10 +64,18 @@ export async function GET(request: NextRequest) {
       }
 
       case 'institutes': {
-        const institutes = await db.institute.findMany({
-          orderBy: { createdAt: 'desc' },
-          select: { id: true, name: true, slug: true, city: true, email: true, phone: true, isActive: true, createdAt: true, ownerId: true },
-        })
+        const page = parseInt(searchParams.get('page') || '1')
+        const limit = parseInt(searchParams.get('limit') || '50')
+
+        const [institutes, total] = await Promise.all([
+          db.institute.findMany({
+            orderBy: { createdAt: 'desc' },
+            skip: (page - 1) * limit,
+            take: limit,
+            select: { id: true, name: true, slug: true, city: true, email: true, phone: true, isActive: true, createdAt: true, ownerId: true },
+          }),
+          db.institute.count(),
+        ])
 
         // Enrich with owner data
         const ownerIds = [...new Set(institutes.map((i) => i.ownerId).filter(Boolean))]
@@ -97,18 +105,34 @@ export async function GET(request: NextRequest) {
           },
         }))
 
-        return NextResponse.json({ institutes: enrichedInstitutes })
+        return NextResponse.json({
+          institutes: enrichedInstitutes,
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit),
+          },
+        })
       }
 
       case 'users': {
-        const users = await db.user.findMany({
-          orderBy: { createdAt: 'desc' },
-          select: {
-            id: true, firstName: true, lastName: true, email: true,
-            mobile: true, type: true, status: true, lastLoginAt: true,
-            createdAt: true, instituteId: true,
-          },
-        })
+        const page = parseInt(searchParams.get('page') || '1')
+        const limit = parseInt(searchParams.get('limit') || '50')
+
+        const [users, total] = await Promise.all([
+          db.user.findMany({
+            orderBy: { createdAt: 'desc' },
+            skip: (page - 1) * limit,
+            take: limit,
+            select: {
+              id: true, firstName: true, lastName: true, email: true,
+              mobile: true, type: true, status: true, lastLoginAt: true,
+              createdAt: true, instituteId: true,
+            },
+          }),
+          db.user.count(),
+        ])
 
         // Enrich with institute names
         const instIds = [...new Set(users.map((u) => u.instituteId).filter(Boolean))]
@@ -125,7 +149,15 @@ export async function GET(request: NextRequest) {
           institute: user.instituteId ? instMap.get(user.instituteId) || null : null,
         }))
 
-        return NextResponse.json({ users: enrichedUsers })
+        return NextResponse.json({
+          users: enrichedUsers,
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit),
+          },
+        })
       }
 
       case 'activity': {

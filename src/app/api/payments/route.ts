@@ -216,105 +216,70 @@ export async function POST(request: NextRequest) {
 
     const paymentAmount = parseFloat(amount);
 
-    // Create payment
-    const payment = await db.payment.create({
-      data: {
-        instituteId,
-        studentId,
-        amount: paymentAmount,
-        currency: currency || "LKR",
-        paymentMethod: paymentMethod || "cash",
-        referenceNumber,
-        bankName,
-        slipImage,
-        notes,
-        status: "completed",
-        recordedBy,
-      },
-    });
-
-    let remainingAmount = paymentAmount;
-    let allocatedDueIds: string[] = feeDueIds || [];
-    const excludedIds = new Set<string>();
-
-    // If specific feeDueIds provided (e.g. Quick Pay), allocate to those first
-    // If no feeDueIds, find all unpaid/partial dues (oldest first)
-    if (allocatedDueIds.length === 0) {
-      const unpaidDues = await db.feeDue.findMany({
-        where: {
-          studentId,
-          status: { in: ["unpaid", "partial"] },
-        },
-        orderBy: { dueDate: "asc" },
-      });
-      allocatedDueIds = unpaidDues.map((d) => d.id);
-    } else {
-      // Track these so we can skip them when auto-allocating overflow
-      for (const id of allocatedDueIds) excludedIds.add(id);
-    }
-
-    // Allocate to fee dues
-    for (const dueId of allocatedDueIds) {
-      if (remainingAmount <= 0) break;
-
-      const feeDue = await db.feeDue.findUnique({ where: { id: dueId } });
-      if (!feeDue || feeDue.status === "paid") continue;
-
-      const outstanding = feeDue.amount - feeDue.amountPaid - feeDue.waivedAmount;
-      const allocAmount = Math.min(remainingAmount, Math.max(outstanding, 0));
-
-      if (allocAmount <= 0) continue;
-
-      await db.paymentAllocation.create({
+    // Wrap all writes in a transaction for atomicity
+    const { payment, receipt } = await db.$transaction(async (tx) => {
+      // Create payment
+      const payment = await tx.payment.create({
         data: {
-          paymentId: payment.id,
-          feeDueId: dueId,
-          amount: allocAmount,
-        },
-      });
-
-      const newPaid = feeDue.amountPaid + allocAmount;
-      const isFullyPaid = newPaid >= feeDue.amount;
-
-      await db.feeDue.update({
-        where: { id: dueId },
-        data: {
-          amountPaid: newPaid,
-          status: isFullyPaid ? "paid" : "partial",
-          paidAt: isFullyPaid ? new Date() : null,
-        },
-      });
-
-      remainingAmount -= allocAmount;
-    }
-
-    // Overflow: if money remains after targeted dues, auto-allocate to other unpaid dues
-    if (remainingAmount > 0 && excludedIds.size > 0) {
-      const otherDues = await db.feeDue.findMany({
-        where: {
+          instituteId,
           studentId,
-          status: { in: ["unpaid", "partial"] },
-          id: { notIn: [...excludedIds] },
+          amount: paymentAmount,
+          currency: currency || "LKR",
+          paymentMethod: paymentMethod || "cash",
+          referenceNumber,
+          bankName,
+          slipImage,
+          notes,
+          status: "completed",
+          recordedBy,
         },
-        orderBy: { dueDate: "asc" },
       });
 
-      for (const due of otherDues) {
+      let remainingAmount = paymentAmount;
+      let allocatedDueIds: string[] = feeDueIds || [];
+      const excludedIds = new Set<string>();
+
+      // If specific feeDueIds provided (e.g. Quick Pay), allocate to those first
+      // If no feeDueIds, find all unpaid/partial dues (oldest first)
+      if (allocatedDueIds.length === 0) {
+        const unpaidDues = await tx.feeDue.findMany({
+          where: {
+            studentId,
+            status: { in: ["unpaid", "partial"] },
+          },
+          orderBy: { dueDate: "asc" },
+        });
+        allocatedDueIds = unpaidDues.map((d) => d.id);
+      } else {
+        // Track these so we can skip them when auto-allocating overflow
+        for (const id of allocatedDueIds) excludedIds.add(id);
+      }
+
+      // Allocate to fee dues
+      for (const dueId of allocatedDueIds) {
         if (remainingAmount <= 0) break;
 
-        const outstanding = due.amount - due.amountPaid - due.waivedAmount;
+        const feeDue = await tx.feeDue.findUnique({ where: { id: dueId } });
+        if (!feeDue || feeDue.status === "paid") continue;
+
+        const outstanding = feeDue.amount - feeDue.amountPaid - feeDue.waivedAmount;
         const allocAmount = Math.min(remainingAmount, Math.max(outstanding, 0));
+
         if (allocAmount <= 0) continue;
 
-        await db.paymentAllocation.create({
-          data: { paymentId: payment.id, feeDueId: due.id, amount: allocAmount },
+        await tx.paymentAllocation.create({
+          data: {
+            paymentId: payment.id,
+            feeDueId: dueId,
+            amount: allocAmount,
+          },
         });
 
-        const newPaid = due.amountPaid + allocAmount;
-        const isFullyPaid = newPaid >= due.amount;
+        const newPaid = feeDue.amountPaid + allocAmount;
+        const isFullyPaid = newPaid >= feeDue.amount;
 
-        await db.feeDue.update({
-          where: { id: due.id },
+        await tx.feeDue.update({
+          where: { id: dueId },
           data: {
             amountPaid: newPaid,
             status: isFullyPaid ? "paid" : "partial",
@@ -324,58 +289,98 @@ export async function POST(request: NextRequest) {
 
         remainingAmount -= allocAmount;
       }
-    }
 
-    // Update student totalPaid
-    await db.student.update({
-      where: { id: studentId },
-      data: { totalPaid: { increment: paymentAmount } },
-    });
+      // Overflow: if money remains after targeted dues, auto-allocate to other unpaid dues
+      if (remainingAmount > 0 && excludedIds.size > 0) {
+        const otherDues = await tx.feeDue.findMany({
+          where: {
+            studentId,
+            status: { in: ["unpaid", "partial"] },
+            id: { notIn: [...excludedIds] },
+          },
+          orderBy: { dueDate: "asc" },
+        });
 
-    // Recalculate student's outstandingBalance
-    const allUnpaidDues = await db.feeDue.findMany({
-      where: { studentId, status: { in: ["unpaid", "partial"] } },
-    });
-    const outstanding = allUnpaidDues.reduce(
-      (sum, d) => sum + d.amount - (d.amountPaid || 0) - (d.waivedAmount || 0),
-      0
-    );
-    await db.student.update({
-      where: { id: studentId },
-      data: { outstandingBalance: outstanding },
-    });
+        for (const due of otherDues) {
+          if (remainingAmount <= 0) break;
 
-    // Generate receipt number WITH dash: RCP-0001
-    const institute = await db.institute.findUnique({
-      where: { id: instituteId },
-      select: { receiptPrefix: true },
-    });
+          const outstanding = due.amount - due.amountPaid - due.waivedAmount;
+          const allocAmount = Math.min(remainingAmount, Math.max(outstanding, 0));
+          if (allocAmount <= 0) continue;
 
-    const receiptCount = await db.receipt.count({ where: { instituteId } });
-    const receiptNumber = `${institute?.receiptPrefix || "RCP"}-${String(receiptCount + 1).padStart(4, "0")}`;
+          await tx.paymentAllocation.create({
+            data: { paymentId: payment.id, feeDueId: due.id, amount: allocAmount },
+          });
 
-    // Create receipt
-    const receipt = await db.receipt.create({
-      data: {
-        instituteId,
-        paymentId: payment.id,
-        studentId,
-        receiptNumber,
-        totalAmount: paymentAmount,
-        paymentMethod: paymentMethod || "cash",
-        generatedBy: recordedBy,
-      },
-    });
+          const newPaid = due.amountPaid + allocAmount;
+          const isFullyPaid = newPaid >= due.amount;
 
-    // Activity log
-    await db.activityLog.create({
-      data: {
-        instituteId,
-        description: `Payment received: LKR ${paymentAmount.toLocaleString()}`,
-        subjectType: "Payment",
-        subjectId: payment.id,
-        causerId: recordedBy,
-      },
+          await tx.feeDue.update({
+            where: { id: due.id },
+            data: {
+              amountPaid: newPaid,
+              status: isFullyPaid ? "paid" : "partial",
+              paidAt: isFullyPaid ? new Date() : null,
+            },
+          });
+
+          remainingAmount -= allocAmount;
+        }
+      }
+
+      // Update student totalPaid
+      await tx.student.update({
+        where: { id: studentId },
+        data: { totalPaid: { increment: paymentAmount } },
+      });
+
+      // Recalculate student's outstandingBalance
+      const allUnpaidDues = await tx.feeDue.findMany({
+        where: { studentId, status: { in: ["unpaid", "partial"] } },
+      });
+      const outstanding = allUnpaidDues.reduce(
+        (sum, d) => sum + d.amount - (d.amountPaid || 0) - (d.waivedAmount || 0),
+        0
+      );
+      await tx.student.update({
+        where: { id: studentId },
+        data: { outstandingBalance: outstanding },
+      });
+
+      // Generate receipt number WITH dash: RCP-0001
+      const institute = await tx.institute.findUnique({
+        where: { id: instituteId },
+        select: { receiptPrefix: true },
+      });
+
+      const receiptCount = await tx.receipt.count({ where: { instituteId } });
+      const receiptNumber = `${institute?.receiptPrefix || "RCP"}-${String(receiptCount + 1).padStart(4, "0")}`;
+
+      // Create receipt
+      const receipt = await tx.receipt.create({
+        data: {
+          instituteId,
+          paymentId: payment.id,
+          studentId,
+          receiptNumber,
+          totalAmount: paymentAmount,
+          paymentMethod: paymentMethod || "cash",
+          generatedBy: recordedBy,
+        },
+      });
+
+      // Activity log
+      await tx.activityLog.create({
+        data: {
+          instituteId,
+          description: `Payment received: LKR ${paymentAmount.toLocaleString()}`,
+          subjectType: "Payment",
+          subjectId: payment.id,
+          causerId: recordedBy,
+        },
+      });
+
+      return { payment, receipt };
     });
 
     return NextResponse.json({ payment, receipt }, { status: 201 });

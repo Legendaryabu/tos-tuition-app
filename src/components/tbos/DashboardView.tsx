@@ -117,18 +117,18 @@ export default function DashboardView() {
   }, [currentInstitute?.id])
 
   const quickActions = [
-    { label: 'Add Student', icon: <UserPlus className="h-4 w-4" />, view: 'students' as const, color: 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' },
-    { label: 'Create Batch', icon: <Layers className="h-4 w-4" />, view: 'batches' as const, color: 'bg-sky-50 text-sky-600 hover:bg-sky-100' },
-    { label: 'Record Payment', icon: <Banknote className="h-4 w-4" />, view: 'fees' as const, color: 'bg-amber-50 text-amber-600 hover:bg-amber-100' },
-    { label: 'Mark Attendance', icon: <ClipboardCheck className="h-4 w-4" />, view: 'attendance' as const, color: 'bg-rose-50 text-rose-600 hover:bg-rose-100' },
+    { label: 'Add Student', icon: <UserPlus className="h-4 w-4" />, view: 'students' as const, color: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30' },
+    { label: 'Create Batch', icon: <Layers className="h-4 w-4" />, view: 'batches' as const, color: 'bg-sky-50 dark:bg-sky-900/20 text-sky-600 dark:text-sky-400 hover:bg-sky-100 dark:hover:bg-sky-900/30' },
+    { label: 'Record Payment', icon: <Banknote className="h-4 w-4" />, view: 'fees' as const, color: 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30' },
+    { label: 'Mark Attendance', icon: <ClipboardCheck className="h-4 w-4" />, view: 'attendance' as const, color: 'bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/30' },
   ]
 
   const statusColors: Record<string, string> = {
-    live: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-    in_progress: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-    scheduled: 'bg-sky-50 text-sky-700 border-sky-200',
-    completed: 'bg-gray-100 text-gray-500 border-gray-200',
-    cancelled: 'bg-red-50 text-red-500 border-red-200',
+    live: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800',
+    in_progress: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800',
+    scheduled: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-900/20 dark:text-sky-400 dark:border-sky-800',
+    completed: 'bg-gray-100 text-gray-500 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700',
+    cancelled: 'bg-red-50 text-red-500 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800',
   }
 
   if (error) {
@@ -173,8 +173,8 @@ export default function DashboardView() {
             <Card className="p-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm text-muted-foreground">Total Students</span>
-                <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
-                  <GraduationCap className="h-4 w-4 text-emerald-600" />
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center">
+                  <GraduationCap className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                 </div>
               </div>
               <p className="text-2xl font-bold">{data?.stats.totalStudents ?? 0}</p>
@@ -185,8 +185,8 @@ export default function DashboardView() {
             <Card className="p-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm text-muted-foreground">Active Batches</span>
-                <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center">
-                  <Layers className="h-4 w-4 text-teal-600" />
+                <div className="w-8 h-8 rounded-lg bg-teal-50 dark:bg-teal-900/20 flex items-center justify-center">
+                  <Layers className="h-4 w-4 text-teal-600 dark:text-teal-400" />
                 </div>
               </div>
               <p className="text-2xl font-bold">{data?.stats.activeBatches ?? 0}</p>
@@ -197,8 +197,8 @@ export default function DashboardView() {
             <Card className="p-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm text-muted-foreground">Monthly Revenue</span>
-                <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
-                  <DollarSign className="h-4 w-4 text-amber-600" />
+                <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center">
+                  <DollarSign className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                 </div>
               </div>
               <p className="text-2xl font-bold">{formatLKR(data?.stats.monthlyRevenue ?? 0)}</p>
@@ -211,8 +211,8 @@ export default function DashboardView() {
             <Card className="p-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm text-muted-foreground">Attendance Rate</span>
-                <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center">
-                  <CheckCircle className="h-4 w-4 text-rose-600" />
+                <div className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-900/20 flex items-center justify-center">
+                  <CheckCircle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
                 </div>
               </div>
               <p className="text-2xl font-bold">{data?.stats.attendanceRate ?? 0}%</p>
@@ -329,7 +329,7 @@ export default function DashboardView() {
               <div className="space-y-3 max-h-96 overflow-y-auto">
                 {data.recentPayments.map((p) => (
                   <div key={p.id} className="flex gap-3">
-                    <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center shrink-0 text-xs font-bold text-amber-600">
+                    <div className="w-8 h-8 rounded-full bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center shrink-0 text-xs font-bold text-amber-600 dark:text-amber-400">
                       Rs
                     </div>
                     <div className="flex-1 min-w-0">

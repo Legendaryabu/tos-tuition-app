@@ -1,43 +1,76 @@
-import { db } from "@/lib/db";
-import { NextRequest } from "next/server";
+import bcrypt from 'bcryptjs'
+import { SignJWT, jwtVerify } from 'jose'
+import { db } from '@/lib/db'
+import { NextRequest, NextResponse } from 'next/server'
 
-/**
- * Auth helper utilities for TBM OS
- * Handles password hashing, session validation, and permission checks.
- * Uses plain password comparison by default. Replace with bcrypt in production.
- */
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.JWT_SECRET || 'tbos-jwt-secret-change-in-production-min-32-chars'
+)
+const JWT_EXPIRY = '7d' // 7 days
 
-// Simple hash function (replace with bcrypt in production)
+// ── Password Hashing ──────────────────────────────────────────────────────
 export async function hashPassword(password: string): Promise<string> {
-  // For now, store as-is. In production, use bcrypt:
-  // import bcrypt from 'bcrypt';
-  // return bcrypt.hash(password, 10);
-  return password;
+  return bcrypt.hash(password, 12)
 }
 
-// Verify password (replace with bcrypt in production)
 export async function verifyPassword(
   plainPassword: string,
   hashedPassword: string
 ): Promise<boolean> {
-  // For now, direct comparison. In production, use bcrypt:
-  // import bcrypt from 'bcrypt';
-  // return bcrypt.compare(plainPassword, hashedPassword);
-  return plainPassword === hashedPassword;
+  // Try bcrypt first
+  const isBcryptHash = hashedPassword.startsWith('$2')
+  if (isBcryptHash) {
+    return bcrypt.compare(plainPassword, hashedPassword)
+  }
+  // Fallback: plain-text comparison for migration of existing users
+  return plainPassword === hashedPassword
 }
 
-// Get authenticated user from request headers
-// Expects: x-user-id and x-institute-id headers (set by client after login)
-export async function getAuthUser(request: NextRequest) {
-  const userId = request.headers.get("x-user-id");
-  const instituteId = request.headers.get("x-institute-id");
+// ── JWT Token Management ──────────────────────────────────────────────────
+export async function createToken(payload: {
+  userId: string
+  instituteId?: string
+  type: string
+}): Promise<string> {
+  return new SignJWT({ ...payload })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime(JWT_EXPIRY)
+    .sign(JWT_SECRET)
+}
 
-  if (!userId) {
-    return { user: null, error: "Authentication required" };
+export async function verifyToken(
+  token: string
+): Promise<{ userId: string; instituteId?: string; type: string } | null> {
+  try {
+    const { payload } = await jwtVerify(token, JWT_SECRET)
+    return {
+      userId: payload.userId as string,
+      instituteId: payload.instituteId as string | undefined,
+      type: payload.type as string,
+    }
+  } catch {
+    return null
+  }
+}
+
+// ── Auth from Request ─────────────────────────────────────────────────────
+// Extracts and verifies JWT from Authorization: Bearer <token> header
+// Returns { user, instituteId, error }
+export async function getAuthUser(request: NextRequest) {
+  const authHeader = request.headers.get('authorization')
+  if (!authHeader?.startsWith('Bearer ')) {
+    return { user: null, instituteId: null, error: 'Authentication required' }
+  }
+
+  const token = authHeader.slice(7)
+  const payload = await verifyToken(token)
+  if (!payload) {
+    return { user: null, instituteId: null, error: 'Invalid or expired token' }
   }
 
   const user = await db.user.findUnique({
-    where: { id: userId },
+    where: { id: payload.userId },
     select: {
       id: true,
       firstName: true,
@@ -48,92 +81,155 @@ export async function getAuthUser(request: NextRequest) {
       status: true,
       profilePhoto: true,
     },
-  });
+  })
 
-  if (!user || user.status !== "active") {
-    return { user: null, error: "User not found or inactive" };
+  if (!user || user.status !== 'active') {
+    return { user: null, instituteId: null, error: 'User not found or inactive' }
   }
 
   return {
-    user: {
-      ...user,
-      instituteId: instituteId || user.instituteId,
-    },
-    instituteId: instituteId || user.instituteId,
+    user,
+    instituteId: payload.instituteId || user.instituteId,
     error: null,
-  };
+  }
 }
 
-// Check if user is owner of the institute
-export async function isInstituteOwner(
-  userId: string,
-  instituteId: string
-): Promise<boolean> {
-  const institute = await db.institute.findFirst({
-    where: { id: instituteId, ownerId: userId },
-  });
-  return !!institute;
+// ── Role-Based Authorization ──────────────────────────────────────────────
+export async function requireAuth(request: NextRequest) {
+  const result = await getAuthUser(request)
+  if (result.error || !result.user) {
+    return {
+      user: null,
+      instituteId: null,
+      error: result.error,
+      response: NextResponse.json({ error: result.error }, { status: 401 }),
+    }
+  }
+  return { ...result, response: null }
 }
 
-// Check if user has access to the institute
-export async function hasInstituteAccess(
-  userId: string,
-  instituteId: string
-): Promise<boolean> {
-  if (!userId || !instituteId) return false;
+export async function requireInstituteAccess(request: NextRequest) {
+  const auth = await requireAuth(request)
+  if (auth.response) return auth
 
-  // Super admin has access to all
-  const user = await db.user.findUnique({
-    where: { id: userId },
-    select: { type: true, instituteId: true },
-  });
+  // Get instituteId from query or body
+  const { searchParams } = new URL(request.url)
+  let instituteId = searchParams.get('instituteId')
 
-  if (!user) return false;
-  if (user.type === "super_admin") return true;
-  if (user.type === "owner") {
-    const institute = await db.institute.findFirst({
-      where: { id: instituteId, ownerId: userId },
-    });
-    return !!institute;
+  // For POST/PUT/PATCH, try body
+  if (
+    !instituteId &&
+    ['POST', 'PUT', 'PATCH'].includes(request.method)
+  ) {
+    try {
+      const body =
+        (request as Record<string, unknown>)._parsedBody ||
+        (await request.json())
+      instituteId =
+        (body as Record<string, unknown>).instituteId as string | undefined ||
+        instituteId
+      // Store it on the request object for downstream use
+      ;(request as Record<string, unknown>)._parsedBody = body
+    } catch {
+      // Body might not be JSON or already consumed
+    }
   }
 
-  return user.instituteId === instituteId;
+  if (!instituteId) {
+    return {
+      ...auth,
+      error: 'instituteId required',
+      response: NextResponse.json(
+        { error: 'instituteId is required' },
+        { status: 400 }
+      ),
+    }
+  }
+
+  // Verify access
+  if (auth.user!.type === 'super_admin') {
+    return { ...auth, instituteId }
+  }
+
+  if (auth.user!.type === 'owner') {
+    const institute = await db.institute.findFirst({
+      where: { id: instituteId, ownerId: auth.user!.id },
+    })
+    if (!institute) {
+      return {
+        ...auth,
+        error: 'Access denied',
+        response: NextResponse.json({ error: 'Access denied' }, { status: 403 }),
+      }
+    }
+    return { ...auth, instituteId }
+  }
+
+  // Staff/teacher/student - must belong to this institute
+  if (auth.user!.instituteId !== instituteId) {
+    return {
+      ...auth,
+      error: 'Access denied',
+      response: NextResponse.json({ error: 'Access denied' }, { status: 403 }),
+    }
+  }
+
+  return { ...auth, instituteId }
 }
 
-// Generate next student number based on institute prefix
+// ── Utility: Generate Random Password ─────────────────────────────────────
+export function generateRandomPassword(length = 12): string {
+  const chars =
+    'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%'
+  let password = ''
+  // Ensure at least one uppercase, one lowercase, one digit, one special
+  password += 'ABCDEFGHJKLMNPQRSTUVWXYZ'[
+    Math.floor(Math.random() * 22)
+  ]
+  password += 'abcdefghjkmnpqrstuvwxyz'[
+    Math.floor(Math.random() * 23)
+  ]
+  password += '23456789'[Math.floor(Math.random() * 8)]
+  password += '!@#$%'[Math.floor(Math.random() * 5)]
+  for (let i = 4; i < length; i++) {
+    password += chars[Math.floor(Math.random() * chars.length)]
+  }
+  // Shuffle
+  return password
+    .split('')
+    .sort(() => Math.random() - 0.5)
+    .join('')
+}
+
+// ── Utility: Generate Student Number ──────────────────────────────────────
 export async function generateStudentNumber(
   instituteId: string
 ): Promise<string> {
   const institute = await db.institute.findUnique({
     where: { id: instituteId },
     select: { studentNumberPrefix: true, studentNumberSeq: true },
-  });
+  })
+  if (!institute) throw new Error('Institute not found')
 
-  if (!institute) {
-    throw new Error("Institute not found");
-  }
+  const seq = String(institute.studentNumberSeq + 1).padStart(4, '0')
+  const studentNumber = `${institute.studentNumberPrefix || 'STU'}${seq}`
 
-  const seq = String(institute.studentNumberSeq).padStart(4, "0");
-  const studentNumber = `${institute.studentNumberPrefix}${seq}`;
-
-  // Increment the sequence
   await db.institute.update({
     where: { id: instituteId },
-    data: { studentNumberSeq: institute.studentNumberSeq + 1 },
-  });
+    data: { studentNumberSeq: { increment: 1 } },
+  })
 
-  return studentNumber;
+  return studentNumber
 }
 
-// Generate next receipt number based on institute prefix
+// ── Utility: Generate Receipt Number ──────────────────────────────────────
 export async function generateReceiptNumber(
   instituteId: string
 ): Promise<string> {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = String(today.getMonth() + 1).padStart(2, '0')
 
-  // Find existing receipts this month to determine next number
   const receiptCount = await db.receipt.count({
     where: {
       instituteId,
@@ -142,14 +238,13 @@ export async function generateReceiptNumber(
         lt: new Date(year, today.getMonth() + 1, 1),
       },
     },
-  });
+  })
 
-  const seq = String(receiptCount + 1).padStart(4, "0");
-
+  const seq = String(receiptCount + 1).padStart(4, '0')
   const institute = await db.institute.findUnique({
     where: { id: instituteId },
     select: { receiptPrefix: true },
-  });
+  })
 
-  return `${institute?.receiptPrefix || "RCP"}${year}${month}${seq}`;
+  return `${institute?.receiptPrefix || 'RCP'}${year}${month}${seq}`
 }

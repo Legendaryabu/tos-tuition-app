@@ -58,14 +58,16 @@ npx create-next-app@latest . --typescript --tailwind --app
 npm install zustand @prisma/client
 npm install -D prisma
 
-# 4. Initialize Prisma (SQLite)
-npx prisma init --datasource-provider sqlite
+# 4. Initialize Prisma (PostgreSQL / Neon)
+npx prisma init --datasource-provider postgresql
 
-# 5. Copy the prisma/schema.prisma from this project
-# 6. Push schema to database
+# 5. Set DATABASE_URL in .env to your Neon connection string
+
+# 6. Copy the prisma/schema.prisma from this project
+# 7. Push schema to database
 npx prisma db push
 
-# 7. Start the development server
+# 8. Start the development server
 npm run dev`,
 
   zoomStep1: `Go to: https://marketplace.zoom.us/develop/create
@@ -239,8 +241,11 @@ export default function ZoomSetupGuide({ open, onOpenChange }: SetupGuideProps) 
                     code={`# Install all packages
 npm install
 
-# Setup the database (SQLite)
+# Setup the database (PostgreSQL / Neon)
 npx prisma db push
+
+# Run recommended indexes (see prisma/recommended-indexes.sql)
+# Execute this SQL in your Neon SQL Editor
 
 # Seed demo data (optional)
 npx prisma db seed`}

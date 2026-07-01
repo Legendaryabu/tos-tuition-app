@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     const studentIds = [...new Set(records.map((r) => r.studentId).filter(Boolean))];
     const sessionIds = [...new Set(records.map((r) => r.classSessionId).filter(Boolean))];
 
-    const [students, sessions, batches] = await Promise.all([
+    const [students, sessions] = await Promise.all([
       studentIds.length > 0
         ? db.student.findMany({
             where: { id: { in: studentIds } },
@@ -62,13 +62,14 @@ export async function GET(request: NextRequest) {
             select: { id: true, sessionDate: true, startTime: true, topic: true, batchId: true },
           })
         : [],
-      sessions.length > 0
-        ? db.batch.findMany({
-            where: { id: { in: [...new Set(sessions.map((s) => s.batchId).filter(Boolean))] } },
-            select: { id: true, name: true },
-          })
-        : Promise.resolve([]),
     ]);
+
+    const batches = sessions.length > 0
+      ? await db.batch.findMany({
+          where: { id: { in: [...new Set(sessions.map((s) => s.batchId).filter(Boolean))] } },
+          select: { id: true, name: true },
+        })
+      : [];
 
     const studentMap = new Map(students.map((s) => [s.id, s]));
     const sessionMap = new Map(sessions.map((s) => [s.id, s]));
@@ -115,63 +116,68 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    const results = [];
+    // Wrap all writes in a transaction for atomicity
+    const result = await db.$transaction(async (tx) => {
+      const saved: Awaited<ReturnType<typeof tx.attendanceRecord.create>>[] = [];
 
-    for (const record of records) {
-      const { studentId, status, excuseReason, notes, checkInTime } = record;
+      for (const record of records) {
+        const { studentId, status, excuseReason, notes, checkInTime } = record;
 
-      const existing = await db.attendanceRecord.findUnique({
-        where: {
-          classSessionId_studentId: {
-            classSessionId,
-            studentId,
-          },
-        },
-      });
-
-      if (existing) {
-        const updated = await db.attendanceRecord.update({
-          where: { id: existing.id },
-          data: { status, excuseReason, notes, checkInTime, markedBy, markedAt: new Date() },
-        });
-        results.push(updated);
-      } else {
-        const created = await db.attendanceRecord.create({
-          data: {
-            classSessionId,
-            studentId,
-            batchId: batchId || "",
-            instituteId,
-            status,
-            excuseReason,
-            notes,
-            checkInTime,
-            markedBy,
+        const existing = await tx.attendanceRecord.findUnique({
+          where: {
+            classSessionId_studentId: {
+              classSessionId,
+              studentId,
+            },
           },
         });
-        results.push(created);
-      }
-    }
 
-    // Update session status if all records marked
-    if (batchId) {
-      const batchStudents = await db.batchStudent.findMany({
-        where: { batchId, status: "active" },
-        select: { studentId: true },
-      });
-      const markedCount = results.length;
-      if (markedCount >= batchStudents.length) {
-        await db.classSession.update({
-          where: { id: classSessionId },
-          data: { status: "completed", actualEndedAt: new Date() },
-        });
+        if (existing) {
+          const updated = await tx.attendanceRecord.update({
+            where: { id: existing.id },
+            data: { status, excuseReason, notes, checkInTime, markedBy, markedAt: new Date() },
+          });
+          saved.push(updated);
+        } else {
+          const created = await tx.attendanceRecord.create({
+            data: {
+              classSessionId,
+              studentId,
+              batchId: batchId || "",
+              instituteId,
+              status,
+              excuseReason,
+              notes,
+              checkInTime,
+              markedBy,
+            },
+          });
+          saved.push(created);
+        }
       }
-    }
+
+      // Update session status if all records marked
+      if (batchId) {
+        const batchStudents = await tx.batchStudent.findMany({
+          where: { batchId, status: "active" },
+          select: { studentId: true },
+        });
+        const markedCount = saved.length;
+        if (markedCount >= batchStudents.length) {
+          await tx.classSession.update({
+            where: { id: classSessionId },
+            data: { status: "completed", actualEndedAt: new Date() },
+          });
+        }
+      }
+
+      return saved;
+    });
 
     return NextResponse.json({
       success: true,
-      saved: results.length,
-      records: results,
+      saved: result.length,
+      records: result,
     });
   } catch (error: any) {
     console.error("Mark attendance error:", error);

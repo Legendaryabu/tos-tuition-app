@@ -8,6 +8,8 @@ export async function GET(request: NextRequest) {
     const gradeLevel = searchParams.get("gradeLevel");
     const category = searchParams.get("category");
     const activeOnly = searchParams.get("active") !== "false";
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "500");
 
     if (!instituteId) {
       return NextResponse.json({ error: "instituteId is required" }, { status: 400 });
@@ -18,10 +20,15 @@ export async function GET(request: NextRequest) {
     if (category) where.category = category;
     if (activeOnly) where.isActive = true;
 
-    const subjects = await db.subject.findMany({
-      where,
-      orderBy: { name: "asc" },
-    });
+    const [subjects, total] = await Promise.all([
+      db.subject.findMany({
+        where,
+        orderBy: { name: "asc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      db.subject.count({ where }),
+    ]);
 
     // Count batches per subject
     const subjectIds = subjects.map((s) => s.id);
@@ -39,7 +46,15 @@ export async function GET(request: NextRequest) {
       _count: { batches: countMap.get(s.id) || 0 },
     }));
 
-    return NextResponse.json({ subjects: enrichedSubjects });
+    return NextResponse.json({
+      subjects: enrichedSubjects,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
   } catch (error: any) {
     console.error("Subjects list error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

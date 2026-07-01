@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { setAuthToken } from '@/lib/fetch'
 
 export type ViewName =
   | 'login'
@@ -65,6 +66,8 @@ interface AppState {
   currentUser: CurrentUser | null
   setCurrentUser: (user: CurrentUser | null) => void
   isLoggedIn: () => boolean
+  token: string | null
+  setToken: (token: string | null) => void
 
   // Institute
   currentInstitute: CurrentInstitute | null
@@ -111,6 +114,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   currentUser: null,
   setCurrentUser: (user) => set({ currentUser: user }),
   isLoggedIn: () => get().currentUser !== null,
+  token: null,
+  setToken: (t) => {
+    setAuthToken(t)
+    set({ token: t })
+  },
 
   // Institute
   currentInstitute: null,

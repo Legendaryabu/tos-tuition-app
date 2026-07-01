@@ -217,3 +217,39 @@ export async function GET(
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const body = await request.json();
+    const { status, grade, district, schoolName, mobile, email, stream, examYear } = body;
+
+    const student = await db.student.findUnique({ where: { id } });
+    if (!student) {
+      return NextResponse.json({ error: "Student not found" }, { status: 404 });
+    }
+
+    const updateData: Record<string, unknown> = {};
+    if (status !== undefined) updateData.status = status;
+    if (grade !== undefined) updateData.grade = grade;
+    if (district !== undefined) updateData.district = district;
+    if (schoolName !== undefined) updateData.schoolName = schoolName;
+    if (mobile !== undefined) updateData.mobile = mobile;
+    if (email !== undefined) updateData.email = email;
+    if (stream !== undefined) updateData.stream = stream;
+    if (examYear !== undefined) updateData.examYear = examYear ? parseInt(examYear) : null;
+
+    const updated = await db.student.update({
+      where: { id },
+      data: updateData,
+    });
+
+    return NextResponse.json(updated);
+  } catch (error: any) {
+    console.error("Student update error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}

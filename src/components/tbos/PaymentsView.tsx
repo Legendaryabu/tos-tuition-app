@@ -90,10 +90,10 @@ const methodLabels: Record<string, string> = {
 }
 
 const statusColors: Record<string, string> = {
-  completed: 'bg-emerald-100 text-emerald-700',
-  pending: 'bg-amber-100 text-amber-700',
-  failed: 'bg-red-100 text-red-700',
-  refunded: 'bg-gray-100 text-gray-600',
+  completed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+  pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  failed: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  refunded: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
 }
 
 export default function PaymentsView() {
@@ -541,7 +541,7 @@ export default function PaymentsView() {
                         {payment.recordedByName || payment.recordedBy}
                       </TableCell>
                       <TableCell>
-                        <Badge className={`text-xs ${statusColors[payment.status] || 'bg-gray-100 text-gray-600'}`}>
+                        <Badge className={`text-xs ${statusColors[payment.status] || 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}>
                           {payment.status}
                         </Badge>
                       </TableCell>
@@ -656,7 +656,7 @@ export default function PaymentsView() {
                 </div>
                 <div>
                   <p className="text-muted-foreground">Status</p>
-                  <Badge className={`text-xs mt-0.5 ${statusColors[receiptData.status] || 'bg-gray-100 text-gray-600'}`}>
+                  <Badge className={`text-xs mt-0.5 ${statusColors[receiptData.status] || 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}>
                     {receiptData.status}
                   </Badge>
                 </div>

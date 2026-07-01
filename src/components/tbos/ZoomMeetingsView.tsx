@@ -88,25 +88,10 @@ interface ZoomConnectionInfo {
   planType?: string
 }
 
-const demoMeetings: ZoomMeeting[] = [
-  { id: '1', zoomMeetingId: '8234567890', zoomMeetingNumber: 8234567890, topic: 'O/L Mathematics - Algebra', batchName: 'O/L Mathematics - Group A', batchId: '2', teacherName: 'Mrs. Fernando', startTime: '2025-06-26T10:00:00', durationMinutes: 90, status: 'live', participantCount: 18, joinUrl: 'https://zoom.us/j/8234567890', startUrl: 'https://zoom.us/s/8234567890', passcode: '123456' },
-  { id: '2', zoomMeetingId: '4567890123', zoomMeetingNumber: 4567890123, topic: 'A/L Chemistry - Organic Chem', batchName: 'A/L Chemistry - 2025', batchId: '3', teacherName: 'Dr. Bandara', startTime: '2025-06-26T14:00:00', durationMinutes: 120, status: 'scheduled', participantCount: 0, joinUrl: 'https://zoom.us/j/4567890123', passcode: 'abc123' },
-  { id: '3', zoomMeetingId: '7890123456', zoomMeetingNumber: 7890123456, topic: 'A/L Biology - Genetics', batchName: 'A/L Biology - 2025', batchId: '5', teacherName: 'Ms. Kumari', startTime: '2025-06-26T16:00:00', durationMinutes: 90, status: 'scheduled', participantCount: 0, joinUrl: 'https://zoom.us/j/7890123456', passcode: 'bio456' },
-  { id: '4', zoomMeetingId: '1234567890', zoomMeetingNumber: 1234567890, topic: 'O/L Mathematics - Geometry', batchName: 'O/L Mathematics - Group A', batchId: '2', teacherName: 'Mrs. Fernando', startTime: '2025-06-24T10:00:00', durationMinutes: 90, status: 'ended', participantCount: 20, joinUrl: 'https://zoom.us/j/1234567890', passcode: '123456', recordingUrl: 'https://zoom.us/rec/abc' },
-  { id: '5', zoomMeetingId: '2345678901', zoomMeetingNumber: 2345678901, topic: 'A/L Chemistry - Physical Chem', batchName: 'A/L Chemistry - 2025', batchId: '3', teacherName: 'Dr. Bandara', startTime: '2025-06-23T14:00:00', durationMinutes: 120, status: 'ended', participantCount: 16, joinUrl: 'https://zoom.us/j/2345678901', passcode: 'abc123', recordingUrl: 'https://zoom.us/rec/def', recordingStatus: 'completed' },
-]
-
-const demoStats: ZoomStats = {
-  totalThisMonth: 24,
-  totalHours: 36,
-  avgParticipants: 17,
-  recordingsCount: 8,
-}
-
 const statusColors: Record<string, string> = {
-  live: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-  scheduled: 'bg-sky-100 text-sky-700 border-sky-200',
-  ended: 'bg-gray-100 text-gray-500 border-gray-200',
+  live: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800',
+  scheduled: 'bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-900/30 dark:text-sky-400 dark:border-sky-800',
+  ended: 'bg-gray-100 text-gray-500 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700',
 }
 
 export default function ZoomMeetingsView() {
@@ -152,7 +137,8 @@ export default function ZoomMeetingsView() {
         ])
         if (meetingsRes.ok) {
           const data = await meetingsRes.json()
-          if (data.meetings?.length > 0) setMeetings(data.meetings)
+          setMeetings(data.meetings || [])
+          setStats({ totalThisMonth: data.pagination?.total || 0, totalHours: 0, avgParticipants: 0, recordingsCount: 0 })
         }
         if (statusRes.ok) {
           const statusData = await statusRes.json()
@@ -177,9 +163,6 @@ export default function ZoomMeetingsView() {
         }
       } catch { /* ok */ }
 
-      // Fallback to demo data
-      setMeetings(prev => prev.length > 0 ? prev : demoMeetings)
-      setStats(demoStats)
       setLoading(false)
     }
     fetchData()
@@ -314,7 +297,7 @@ export default function ZoomMeetingsView() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold">Online Classes / Zoom</h1>
-            <Badge variant="outline" className={zoomConnected ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-red-300 bg-red-50 text-red-700'}>
+            <Badge variant="outline" className={zoomConnected ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' : 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400'}>
               {zoomConnected ? <Wifi className="h-3 w-3 mr-1" /> : <WifiOff className="h-3 w-3 mr-1" />}
               {zoomConnected ? (zoomUser?.email || 'Connected') : 'Not Connected'}
             </Badge>
@@ -417,18 +400,18 @@ export default function ZoomMeetingsView() {
 
       {/* Connected Info Card */}
       {zoomConnected && zoomUser && (
-        <Card className="bg-emerald-50 border-emerald-200">
+        <Card className="bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800">
           <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
-                <CheckCircle className="h-5 w-5 text-emerald-600" />
+              <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
               </div>
               <div>
-                <p className="font-medium text-emerald-900">{zoomUser.displayName || 'Zoom Connected'}</p>
-                <p className="text-sm text-emerald-700">{zoomUser.email}{zoomUser.planType ? ` · ${zoomUser.planType} plan` : ''}</p>
+                <p className="font-medium text-emerald-900 dark:text-emerald-200">{zoomUser.displayName || 'Zoom Connected'}</p>
+                <p className="text-sm text-emerald-700 dark:text-emerald-400">{zoomUser.email}{zoomUser.planType ? ` · ${zoomUser.planType} plan` : ''}</p>
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={() => setShowCreateDialog(true)} className="gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-100">
+            <Button variant="outline" size="sm" onClick={() => setShowCreateDialog(true)} className="gap-2 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30">
               <Plus className="h-3.5 w-3.5" /> New Meeting
             </Button>
           </CardContent>
@@ -493,7 +476,7 @@ export default function ZoomMeetingsView() {
                       <TableCell className="hidden lg:table-cell text-sm">{meeting.participantCount}</TableCell>
                       <TableCell className="hidden lg:table-cell">
                         {meeting.recordingUrl ? (
-                          <Badge className="text-xs bg-emerald-100 text-emerald-700">Available</Badge>
+                          <Badge className="text-xs bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Available</Badge>
                         ) : (
                           <span className="text-xs text-muted-foreground">-</span>
                         )}
@@ -538,8 +521,8 @@ export default function ZoomMeetingsView() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="bg-sky-50 border border-sky-200 rounded-lg p-3">
-              <p className="text-xs text-sky-800">
+            <div className="bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-lg p-3">
+              <p className="text-xs text-sky-800 dark:text-sky-300">
                 Need help? Click <button onClick={() => { setShowConnectDialog(false); setShowSetupGuide(true) }} className="underline font-medium">Setup Guide</button> for step-by-step instructions on creating a Zoom app and getting these credentials.
               </p>
             </div>
@@ -557,8 +540,8 @@ export default function ZoomMeetingsView() {
               <Input id="clientSecret" type="password" placeholder="Your Zoom Client Secret" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} />
             </div>
             {connectError && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
-                <AlertCircle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
                 <p className="text-xs text-red-700">{connectError}</p>
               </div>
             )}

@@ -7,6 +7,8 @@ export async function GET(request: NextRequest) {
     const instituteId = searchParams.get("instituteId");
     const subjectId = searchParams.get("subjectId");
     const activeOnly = searchParams.get("active") !== "false";
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "500");
 
     if (!instituteId) {
       return NextResponse.json({ error: "instituteId is required" }, { status: 400 });
@@ -23,10 +25,15 @@ export async function GET(request: NextRequest) {
     }
     if (activeOnly) where.isActive = true;
 
-    const teachers = await db.teacher.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-    });
+    const [teachers, total] = await Promise.all([
+      db.teacher.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      db.teacher.count({ where }),
+    ]);
 
     // Enrich with user data and batch counts
     const userIds = teachers.map((t) => t.userId).filter(Boolean);
@@ -56,7 +63,15 @@ export async function GET(request: NextRequest) {
       _count: { batches: countMap.get(t.id) || 0 },
     }));
 
-    return NextResponse.json({ teachers: enrichedTeachers });
+    return NextResponse.json({
+      teachers: enrichedTeachers,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
   } catch (error: any) {
     console.error("Teachers list error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

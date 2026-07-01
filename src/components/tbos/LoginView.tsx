@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useAppStore } from '@/lib/store'
+import { authFetch, setAuthToken } from '@/lib/fetch'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,12 +12,12 @@ import { Eye, EyeOff, Leaf } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
 export default function LoginView() {
-  const { setActiveView, setCurrentUser, setCurrentInstitute } = useAppStore()
+  const { setActiveView, setCurrentUser, setCurrentInstitute, setToken } = useAppStore()
   const { toast } = useToast()
 
   // Login state
-  const [loginEmail, setLoginEmail] = useState('owner@csa.lk')
-  const [loginPassword, setLoginPassword] = useState('password123')
+  const [loginEmail, setLoginEmail] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loginLoading, setLoginLoading] = useState(false)
 
@@ -39,6 +40,9 @@ export default function LoginView() {
       })
       if (res.ok) {
         const data = await res.json()
+        // Store JWT token
+        setAuthToken(data.token)
+        setToken(data.token)
         const isSuperAdmin = data.user.type === 'super_admin'
         setCurrentUser({
           ...data.user,
@@ -97,7 +101,14 @@ export default function LoginView() {
       })
       if (res.ok) {
         const data = await res.json()
-        setCurrentUser(data.user)
+        // Store JWT token
+        setAuthToken(data.token)
+        setToken(data.token)
+        const isSuperAdmin = data.user.type === 'super_admin'
+        setCurrentUser({
+          ...data.user,
+          isSuperAdmin,
+        })
         setCurrentInstitute(data.institute)
         setActiveView('onboarding')
         toast({ title: 'Account created!', description: "Let's set up your institute" })
@@ -161,7 +172,7 @@ export default function LoginView() {
       </div>
 
       {/* Right panel - forms */}
-      <div className="flex-1 flex items-center justify-center p-6 bg-white">
+      <div className="flex-1 flex items-center justify-center p-6 bg-background">
         <div className="w-full max-w-md">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
@@ -217,16 +228,6 @@ export default function LoginView() {
                           {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
                       </div>
-                    </div>
-
-                    <div className="bg-muted/50 rounded-lg p-3 text-sm">
-                      <p className="text-muted-foreground">
-                        <span className="font-medium text-foreground">Demo:</span>{' '}
-                        owner@csa.lk / password123
-                      </p>
-                      <p className="text-muted-foreground text-xs mt-1">
-                        Super Admin: admin@tbos.lk / admin123
-                      </p>
                     </div>
                   </CardContent>
                   <CardFooter>
@@ -295,7 +296,7 @@ export default function LoginView() {
                       <Input
                         id="reg-password"
                         type="password"
-                        placeholder="Min 8 characters"
+                        placeholder="Min 8 chars, uppercase + lowercase + digit"
                         value={regPassword}
                         onChange={(e) => setRegPassword(e.target.value)}
                         required

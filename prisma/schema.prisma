@@ -59,6 +59,8 @@ model Institute {
   ownerId              String    @unique
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
+
+  @@index([ownerId])
 }
 
 model User {
@@ -82,6 +84,12 @@ model User {
   lastLoginAt     DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+
+  @@unique([email, instituteId])
+  @@index([email])
+  @@index([instituteId])
+  @@index([type])
+  @@index([status])
 }
 
 model Branch {
@@ -100,6 +108,8 @@ model Branch {
   notes       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([instituteId])
 }
 
 model Hall {
@@ -130,6 +140,8 @@ model Subject {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([instituteId])
 }
 
 model Batch {
@@ -165,6 +177,11 @@ model Batch {
   notes               String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
+
+  @@index([instituteId])
+  @@index([subjectId])
+  @@index([teacherId])
+  @@index([status])
 }
 
 model BatchStudent {
@@ -179,6 +196,10 @@ model BatchStudent {
   updatedAt   DateTime @updatedAt
 
   @@unique([batchId, studentId])
+  @@index([studentId])
+  @@index([batchId])
+  @@index([studentId, status])
+  @@index([batchId, status])
 }
 
 model TimetableSlot {
@@ -229,6 +250,11 @@ model ClassSession {
   createdBy        String
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+
+  @@index([instituteId])
+  @@index([batchId])
+  @@index([sessionDate])
+  @@index([status])
 }
 
 model ZoomMeeting {
@@ -286,6 +312,15 @@ model Student {
   referralSource     String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+
+  // TODO: Enable after migrating seed data — all students currently share studentNumber "CSA-0001"
+  // @@unique([studentNumber, instituteId])
+  @@index([instituteId])
+  @@index([userId])
+  @@index([branchId])
+  @@index([grade, instituteId])
+  @@index([status])
+  @@index([studentNumber])
 }
 
 model StudentNote {
@@ -326,6 +361,9 @@ model Teacher {
   isActive             Boolean  @default(true)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
+
+  @@index([instituteId])
+  @@index([userId])
 }
 
 model Employee {
@@ -360,6 +398,9 @@ model AttendanceRecord {
   updatedAt      DateTime @updatedAt
 
   @@unique([classSessionId, studentId])
+  @@index([studentId])
+  @@index([classSessionId])
+  @@index([status])
 }
 
 model FeeStructure {
@@ -402,6 +443,12 @@ model FeeDue {
   paidAt          DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  @@unique([studentId, feeStructureId, periodMonth, periodYear])
+  @@index([studentId])
+  @@index([instituteId])
+  @@index([status])
+  @@index([dueDate])
 }
 
 model Payment {
@@ -423,6 +470,11 @@ model Payment {
   recordedAt         DateTime @default(now())
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+
+  @@index([studentId])
+  @@index([instituteId])
+  @@index([status])
+  @@index([recordedAt])
 }
 
 model PaymentAllocation {
@@ -431,6 +483,8 @@ model PaymentAllocation {
   feeDueId  String
   amount    Float
   createdAt DateTime @default(now())
+
+  @@unique([paymentId, feeDueId])
 }
 
 model Invoice {
@@ -462,6 +516,10 @@ model Receipt {
   paymentMethod String
   generatedBy   String
   createdAt     DateTime @default(now())
+
+  @@unique([receiptNumber, instituteId])
+  @@index([instituteId])
+  @@index([paymentId])
 }
 
 model Exam {
@@ -674,4 +732,7 @@ model ActivityLog {
   properties  String?
   ipAddress   String?
   createdAt   DateTime @default(now())
+
+  @@index([instituteId])
+  @@index([causerId])
 }

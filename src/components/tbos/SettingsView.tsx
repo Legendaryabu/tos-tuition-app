@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAppStore } from '@/lib/store'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { Save, Building, Palette, Globe, Video, Link2, CheckCircle, Wifi, WifiOff } from 'lucide-react'
+import { Save, Building, Palette, Video, Link2, CheckCircle, Wifi, WifiOff, Loader2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
 export default function SettingsView() {
@@ -42,6 +42,10 @@ export default function SettingsView() {
     autoRecord: false,
   })
   const [testing, setTesting] = useState(false)
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [savingZoom, setSavingZoom] = useState(false)
+  const [savingFeatures, setSavingFeatures] = useState(false)
+  const [savingDisplay, setSavingDisplay] = useState(false)
 
   // Features
   const [features, setFeatures] = useState({
@@ -64,43 +68,198 @@ export default function SettingsView() {
     accentColor: 'emerald',
   })
 
-  const handleSaveProfile = () => {
-    setCurrentInstitute({
-      ...currentInstitute!,
-      name: profile.name,
-      phone: profile.phone,
-      email: profile.email,
-      city: profile.city,
-    })
-    toast({ title: 'Profile updated', description: 'Institute profile saved successfully' })
+  // Load settings from API on mount
+  useEffect(() => {
+    if (!currentInstitute) return
+    fetch(`/api/settings?instituteId=${currentInstitute.id}`)
+      .then((res) => {
+        if (!res.ok) return
+        return res.json()
+      })
+      .then((data: any[] | undefined) => {
+        if (!data || !Array.isArray(data)) return
+        for (const s of data) {
+          if (s.group === 'features' && s.key in features) {
+            setFeatures((prev) => ({ ...prev, [s.key]: s.value === 'true' }))
+          }
+          if (s.group === 'display' && s.key in display) {
+            setDisplay((prev) => ({ ...prev, [s.key]: s.value }))
+          }
+          if (s.group === 'zoom' && s.key in zoomSettings) {
+            setZoomSettings((prev) => ({ ...prev, [s.key]: s.value === 'true' }))
+          }
+        }
+      })
+      .catch(() => {})
+  }, [currentInstitute])
+
+  const handleSaveProfile = async () => {
+    if (!currentInstitute) return
+    setSavingProfile(true)
+    try {
+      const res = await fetch('/api/institute', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instituteId: currentInstitute.id,
+          name: profile.name,
+          phone: profile.phone,
+          email: profile.email,
+          city: profile.city,
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to save profile')
+      }
+      setCurrentInstitute({
+        ...currentInstitute!,
+        name: profile.name,
+        phone: profile.phone,
+        email: profile.email,
+        city: profile.city,
+      })
+      toast({ title: 'Profile updated', description: 'Institute profile saved successfully' })
+    } catch (err: any) {
+      toast({ title: 'Error saving profile', description: err.message, variant: 'destructive' })
+    } finally {
+      setSavingProfile(false)
+    }
   }
 
-  const handleTestZoom = () => {
+  const handleTestZoom = async () => {
+    if (!currentInstitute) return
+    if (!zoomForm.apiKey || !zoomForm.apiSecret) {
+      toast({ title: 'Missing credentials', description: 'Please enter API Key and API Secret first', variant: 'destructive' })
+      return
+    }
     setTesting(true)
-    setTimeout(() => {
-      setTesting(false)
+    try {
+      const res = await fetch('/api/zoom/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instituteId: currentInstitute.id,
+          accountId: zoomForm.apiKey,
+          clientId: zoomForm.apiKey,
+          clientSecret: zoomForm.apiSecret,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || data.message || 'Connection test failed')
+      }
+      setZoomConnected(true)
+      setCurrentInstitute({ ...currentInstitute!, zoomEnabled: true })
       toast({ title: 'Connection successful!', description: 'Zoom API is working correctly' })
-    }, 1500)
+    } catch (err: any) {
+      toast({ title: 'Connection failed', description: err.message, variant: 'destructive' })
+    } finally {
+      setTesting(false)
+    }
   }
 
-  const handleConnectZoom = () => {
-    setZoomConnected(true)
-    setCurrentInstitute({ ...currentInstitute!, zoomEnabled: true })
-    toast({ title: 'Zoom Connected!', description: 'Your Zoom account has been linked' })
+  const handleConnectZoom = async () => {
+    if (!currentInstitute) return
+    if (!zoomForm.apiKey || !zoomForm.apiSecret) {
+      toast({ title: 'Missing credentials', description: 'Please enter API Key and API Secret', variant: 'destructive' })
+      return
+    }
+    setSavingZoom(true)
+    try {
+      const res = await fetch('/api/zoom/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instituteId: currentInstitute.id,
+          accountId: zoomForm.apiKey,
+          clientId: zoomForm.apiKey,
+          clientSecret: zoomForm.apiSecret,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || data.message || 'Failed to connect Zoom')
+      }
+      setZoomConnected(true)
+      setCurrentInstitute({ ...currentInstitute!, zoomEnabled: true })
+      toast({ title: 'Zoom Connected!', description: 'Your Zoom account has been linked' })
+    } catch (err: any) {
+      toast({ title: 'Error connecting Zoom', description: err.message, variant: 'destructive' })
+    } finally {
+      setSavingZoom(false)
+    }
   }
 
-  const handleDisconnectZoom = () => {
-    setZoomConnected(false)
-    setCurrentInstitute({ ...currentInstitute!, zoomEnabled: false })
-    toast({ title: 'Zoom Disconnected' })
+  const handleDisconnectZoom = async () => {
+    if (!currentInstitute) return
+    setSavingZoom(true)
+    try {
+      const res = await fetch(`/api/zoom/connect?instituteId=${currentInstitute.id}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to disconnect Zoom')
+      }
+      setZoomConnected(false)
+      setCurrentInstitute({ ...currentInstitute!, zoomEnabled: false })
+      toast({ title: 'Zoom Disconnected' })
+    } catch (err: any) {
+      toast({ title: 'Error disconnecting Zoom', description: err.message, variant: 'destructive' })
+    } finally {
+      setSavingZoom(false)
+    }
   }
 
-  const handleSaveFeatures = () => {
-    toast({ title: 'Features saved', description: 'Feature settings updated' })
+  const handleSaveFeatures = async () => {
+    if (!currentInstitute) return
+    setSavingFeatures(true)
+    try {
+      const settings: Record<string, { value: string; type: string; group: string }> = {}
+      for (const [key, value] of Object.entries(features)) {
+        settings[key] = { value: String(value), type: 'boolean', group: 'features' }
+      }
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instituteId: currentInstitute.id, settings }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to save features')
+      }
+      toast({ title: 'Features saved', description: 'Feature settings updated' })
+    } catch (err: any) {
+      toast({ title: 'Error saving features', description: err.message, variant: 'destructive' })
+    } finally {
+      setSavingFeatures(false)
+    }
   }
 
-  const handleSaveDisplay = () => {
-    toast({ title: 'Display settings saved' })
+  const handleSaveDisplay = async () => {
+    if (!currentInstitute) return
+    setSavingDisplay(true)
+    try {
+      const settings: Record<string, { value: string; type: string; group: string }> = {}
+      for (const [key, value] of Object.entries(display)) {
+        settings[key] = { value: String(value), type: 'string', group: 'display' }
+      }
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instituteId: currentInstitute.id, settings }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to save display settings')
+      }
+      toast({ title: 'Display settings saved' })
+    } catch (err: any) {
+      toast({ title: 'Error saving display settings', description: err.message, variant: 'destructive' })
+    } finally {
+      setSavingDisplay(false)
+    }
   }
 
   return (
@@ -141,7 +300,10 @@ export default function SettingsView() {
                 <Label>Address</Label>
                 <Input value={profile.address} onChange={(e) => setProfile({ ...profile, address: e.target.value })} />
               </div>
-              <Button onClick={handleSaveProfile} className="gap-2"><Save className="h-4 w-4" /> Save Changes</Button>
+              <Button onClick={handleSaveProfile} disabled={savingProfile} className="gap-2">
+                {savingProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                {savingProfile ? 'Saving...' : 'Save Changes'}
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
@@ -158,7 +320,7 @@ export default function SettingsView() {
                     </CardTitle>
                     <CardDescription>Connect your Zoom account for online classes</CardDescription>
                   </div>
-                  <Badge variant="outline" className={zoomConnected ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-red-300 bg-red-50 text-red-700'}>
+                  <Badge variant="outline" className={zoomConnected ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' : 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400'}>
                     {zoomConnected ? <><Wifi className="h-3 w-3 mr-1" /> Connected</> : <><WifiOff className="h-3 w-3 mr-1" /> Not Connected</>}
                   </Badge>
                 </div>
@@ -166,17 +328,18 @@ export default function SettingsView() {
               <CardContent className="space-y-4">
                 {zoomConnected ? (
                   <>
-                    <div className="bg-emerald-50 rounded-lg p-4">
-                      <div className="flex items-center gap-2 text-emerald-700">
+                    <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-lg p-4">
+                      <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
                         <CheckCircle className="h-5 w-5" />
                         <span className="font-medium text-sm">Zoom is connected and ready</span>
                       </div>
-                      <p className="text-xs text-emerald-600 mt-1">
+                      <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
                         Your Zoom account is linked. You can create and manage meetings from the Online Classes section.
                       </p>
                     </div>
-                    <Button variant="outline" onClick={handleDisconnectZoom} className="text-destructive gap-2">
-                      <WifiOff className="h-4 w-4" /> Disconnect Zoom
+                    <Button variant="outline" onClick={handleDisconnectZoom} disabled={savingZoom} className="text-destructive gap-2">
+                      {savingZoom ? <Loader2 className="h-4 w-4 animate-spin" /> : <WifiOff className="h-4 w-4" />}
+                      {savingZoom ? 'Disconnecting...' : 'Disconnect Zoom'}
                     </Button>
                   </>
                 ) : (
@@ -192,8 +355,12 @@ export default function SettingsView() {
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <Button onClick={handleConnectZoom} className="gap-2"><Link2 className="h-4 w-4" /> Connect</Button>
-                      <Button variant="outline" onClick={handleTestZoom} disabled={testing}>
+                      <Button onClick={handleConnectZoom} disabled={savingZoom || testing} className="gap-2">
+                        {savingZoom ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+                        {savingZoom ? 'Connecting...' : 'Connect'}
+                      </Button>
+                      <Button variant="outline" onClick={handleTestZoom} disabled={savingZoom || testing}>
+                        {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                         {testing ? 'Testing...' : 'Test Connection'}
                       </Button>
                     </div>
@@ -232,7 +399,33 @@ export default function SettingsView() {
                   </div>
                   <Switch checked={zoomSettings.autoRecord} onCheckedChange={(v) => setZoomSettings({ ...zoomSettings, autoRecord: v })} />
                 </div>
-                <Button onClick={() => toast({ title: 'Zoom settings saved' })} className="gap-2"><Save className="h-4 w-4" /> Save Settings</Button>
+                <Button onClick={async () => {
+                  if (!currentInstitute) return
+                  setSavingZoom(true)
+                  try {
+                    const settings: Record<string, { value: string; type: string; group: string }> = {}
+                    for (const [key, value] of Object.entries(zoomSettings)) {
+                      settings[key] = { value: String(value), type: 'boolean', group: 'zoom' }
+                    }
+                    const res = await fetch('/api/settings', {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ instituteId: currentInstitute.id, settings }),
+                    })
+                    if (!res.ok) {
+                      const data = await res.json()
+                      throw new Error(data.error || 'Failed to save zoom settings')
+                    }
+                    toast({ title: 'Zoom settings saved' })
+                  } catch (err: any) {
+                    toast({ title: 'Error saving Zoom settings', description: err.message, variant: 'destructive' })
+                  } finally {
+                    setSavingZoom(false)
+                  }
+                }} disabled={savingZoom} className="gap-2">
+                  {savingZoom ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {savingZoom ? 'Saving...' : 'Save Settings'}
+                </Button>
               </CardContent>
             </Card>
           </div>
@@ -257,7 +450,10 @@ export default function SettingsView() {
                 </div>
               ))}
               <Separator />
-              <Button onClick={handleSaveFeatures} className="gap-2"><Save className="h-4 w-4" /> Save Features</Button>
+              <Button onClick={handleSaveFeatures} disabled={savingFeatures} className="gap-2">
+                {savingFeatures ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                {savingFeatures ? 'Saving...' : 'Save Features'}
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
@@ -316,7 +512,10 @@ export default function SettingsView() {
                   </Select>
                 </div>
               </div>
-              <Button onClick={handleSaveDisplay} className="gap-2"><Save className="h-4 w-4" /> Save Preferences</Button>
+              <Button onClick={handleSaveDisplay} disabled={savingDisplay} className="gap-2">
+                {savingDisplay ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                {savingDisplay ? 'Saving...' : 'Save Preferences'}
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>

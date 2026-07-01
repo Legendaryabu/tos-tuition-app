@@ -72,10 +72,10 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 const STATUS_FILTERS = ['all', 'unpaid', 'overdue', 'partial', 'paid'] as const
 
 const STATUS_BADGE_CLASSES: Record<string, string> = {
-  unpaid: 'bg-amber-100 text-amber-700 border-amber-200',
-  overdue: 'bg-red-100 text-red-700 border-red-200',
-  partial: 'bg-sky-100 text-sky-700 border-sky-200',
-  paid: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  unpaid: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800',
+  overdue: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800',
+  partial: 'bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-900/30 dark:text-sky-400 dark:border-sky-800',
+  paid: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800',
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────
@@ -617,7 +617,7 @@ export default function FeesView() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="p-4">
               <div className="flex items-center gap-2 mb-1">
-                <div className="p-1.5 rounded-md bg-amber-100"><Clock className="h-4 w-4 text-amber-600" /></div>
+                <div className="p-1.5 rounded-md bg-amber-100 dark:bg-amber-900/30"><Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" /></div>
                 <p className="text-sm text-muted-foreground">Unpaid</p>
               </div>
               <p className="text-2xl font-bold mt-1">{duesSummary.totalUnpaid}</p>
@@ -625,22 +625,22 @@ export default function FeesView() {
             </Card>
             <Card className="p-4">
               <div className="flex items-center gap-2 mb-1">
-                <div className="p-1.5 rounded-md bg-red-100"><AlertTriangle className="h-4 w-4 text-red-600" /></div>
+                <div className="p-1.5 rounded-md bg-red-100 dark:bg-red-900/30"><AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" /></div>
                 <p className="text-sm text-muted-foreground">Overdue</p>
               </div>
-              <p className="text-2xl font-bold text-red-600 mt-1">{duesSummary.totalOverdue}</p>
-              <p className="text-xs text-red-500 mt-0.5">{formatLKR(duesSummary.totalOverdueAmount)}</p>
+              <p className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">{duesSummary.totalOverdue}</p>
+              <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">{formatLKR(duesSummary.totalOverdueAmount)}</p>
             </Card>
             <Card className="p-4">
               <div className="flex items-center gap-2 mb-1">
-                <div className="p-1.5 rounded-md bg-sky-100"><DollarSign className="h-4 w-4 text-sky-600" /></div>
+                <div className="p-1.5 rounded-md bg-sky-100 dark:bg-sky-900/30"><DollarSign className="h-4 w-4 text-sky-600 dark:text-sky-400" /></div>
                 <p className="text-sm text-muted-foreground">Partial</p>
               </div>
               <p className="text-2xl font-bold text-amber-600 mt-1">{duesSummary.totalPartial}</p>
             </Card>
             <Card className="p-4">
               <div className="flex items-center gap-2 mb-1">
-                <div className="p-1.5 rounded-md bg-emerald-100"><FileText className="h-4 w-4 text-emerald-600" /></div>
+                <div className="p-1.5 rounded-md bg-emerald-100 dark:bg-emerald-900/30"><FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /></div>
                 <p className="text-sm text-muted-foreground">Total Dues</p>
               </div>
               <p className="text-2xl font-bold mt-1">{duesPagination.total}</p>
@@ -961,11 +961,11 @@ export default function FeesView() {
                       <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                         <Badge variant="outline" className="text-xs">{s.type.replace('_', ' ')}</Badge>
                         {s.isRecurring && (
-                          <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200">
+                          <Badge variant="outline" className="text-xs bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">
                             <RefreshCw className="h-3 w-3 mr-0.5" /> {s.recurrence || 'recurring'}
                           </Badge>
                         )}
-                        <Badge variant="outline" className={`text-xs ${s.isActive ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
+                        <Badge variant="outline" className={`text-xs ${s.isActive ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 border-gray-200 dark:border-gray-700'}`}>
                           {s.isActive ? 'Active' : 'Inactive'}
                         </Badge>
                       </div>
@@ -984,7 +984,7 @@ export default function FeesView() {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="flex-1 gap-1 text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                        className="flex-1 gap-1 text-xs border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
                         onClick={() => openGenerateDialog(s)}
                       >
                         <Zap className="h-3.5 w-3.5" /> Generate Dues
@@ -993,7 +993,7 @@ export default function FeesView() {
                     <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => openStructureDialog(s)}>
                       <Pencil className="h-3.5 w-3.5" /> Edit
                     </Button>
-                    <Button size="sm" variant="outline" className="gap-1 text-xs text-red-600 border-red-200 hover:bg-red-50" onClick={() => setDeleteStructure(s)}>
+                    <Button size="sm" variant="outline" className="gap-1 text-xs text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => setDeleteStructure(s)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
@@ -1020,7 +1020,7 @@ export default function FeesView() {
               <div className="rounded-lg bg-muted/50 p-3 space-y-1">
                 <p className="text-sm font-medium">{quickPayDue.student.fullName}</p>
                 <p className="text-xs text-muted-foreground">{quickPayDue.description}</p>
-                <p className="text-sm font-semibold text-emerald-700 mt-1">
+                <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 mt-1">
                   Remaining: {formatLKR(quickPayDue.amount - quickPayDue.amountPaid - quickPayDue.waivedAmount)}
                 </p>
               </div>

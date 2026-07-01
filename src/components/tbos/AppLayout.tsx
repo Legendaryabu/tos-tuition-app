@@ -2,6 +2,7 @@
 
 import React, { type ReactNode } from 'react'
 import { useAppStore, type ViewName } from '@/lib/store'
+import { setAuthToken } from '@/lib/fetch'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -41,6 +42,7 @@ import {
   Shield,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { ThemeToggle } from '@/components/theme-toggle'
 
 interface NavItem {
   label: string
@@ -88,7 +90,7 @@ const viewTitles: Record<string, string> = {
 }
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
-  const { activeView, setActiveView, currentUser, currentInstitute, setCurrentUser, setCurrentInstitute } = useAppStore()
+  const { activeView, setActiveView, currentUser, currentInstitute, setCurrentUser, setCurrentInstitute, setToken } = useAppStore()
 
   const handleNav = (view: ViewName) => {
     setActiveView(view)
@@ -96,6 +98,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   }
 
   const handleLogout = () => {
+    setAuthToken(null)
+    setToken(null)
     setCurrentUser(null)
     setCurrentInstitute(null)
     setActiveView('login')
@@ -103,7 +107,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   }
 
   const initials = currentUser
-    ? `${currentUser.firstName.charAt(0)}${currentUser.lastName.charAt(0)}`.toUpperCase()
+    ? `${(currentUser.firstName || '').charAt(0) || ''}${(currentUser.lastName || '').charAt(0) || ''}`.toUpperCase().slice(0, 2) || 'U'
     : 'U'
 
   return (
@@ -192,7 +196,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
               </Avatar>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">
-                  {currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : 'User'}
+                  {currentUser ? `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim() || 'User' : 'User'}
                 </p>
                 <p className="text-[11px] text-muted-foreground truncate capitalize">
                   {currentUser?.type || 'owner'}
@@ -241,21 +245,23 @@ function MobileSidebar() {
 }
 
 function Header() {
-  const { activeView, toggleSidebar, notifications, unreadCount, markAllRead, markAsRead, currentUser, setCurrentUser, setCurrentInstitute, setActiveView } = useAppStore()
+  const { activeView, toggleSidebar, notifications, unreadCount, markAllRead, markAsRead, currentUser, setCurrentUser, setCurrentInstitute, setActiveView, setToken } = useAppStore()
   const title = viewTitles[activeView] || 'Dashboard'
 
   const initials = currentUser
-    ? `${currentUser.firstName.charAt(0)}${currentUser.lastName.charAt(0)}`.toUpperCase()
+    ? `${(currentUser.firstName || '').charAt(0) || ''}${(currentUser.lastName || '').charAt(0) || ''}`.toUpperCase().slice(0, 2) || 'U'
     : 'U'
 
   const handleLogout = () => {
+    setAuthToken(null)
+    setToken(null)
     setCurrentUser(null)
     setCurrentInstitute(null)
     setActiveView('login')
   }
 
   return (
-    <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-sm border-b">
+    <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-sm border-b">
       <div className="flex items-center gap-3 px-4 py-3 lg:px-6">
         {/* Mobile menu button */}
         <Button variant="ghost" size="icon" className="lg:hidden" onClick={toggleSidebar}>
@@ -322,6 +328,9 @@ function Header() {
             )}
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {/* Theme toggle */}
+        <ThemeToggle />
 
         {/* User menu with Logout (always visible) */}
         <DropdownMenu>

@@ -10,6 +10,8 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get("status");
     const classType = searchParams.get("classType");
     const gradeLevel = searchParams.get("gradeLevel");
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "50");
 
     if (!instituteId) {
       return NextResponse.json({ error: "instituteId is required" }, { status: 400 });
@@ -23,10 +25,15 @@ export async function GET(request: NextRequest) {
     if (classType) where.classType = classType;
     if (gradeLevel) where.gradeLevel = gradeLevel;
 
-    const batches = await db.batch.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-    });
+    const [batches, total] = await Promise.all([
+      db.batch.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      db.batch.count({ where }),
+    ]);
 
     // Enrich with subject, teacher, branch, student count
     const subjectIds = [...new Set(batches.map((b) => b.subjectId).filter(Boolean))];
@@ -74,7 +81,15 @@ export async function GET(request: NextRequest) {
       _count: { students: countMap.get(b.id) || 0 },
     }));
 
-    return NextResponse.json({ batches: enrichedBatches });
+    return NextResponse.json({
+      batches: enrichedBatches,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
   } catch (error: any) {
     console.error("Batches list error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

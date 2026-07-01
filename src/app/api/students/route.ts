@@ -119,91 +119,96 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    // Generate student number
-    const institute = await db.institute.findUnique({
-      where: { id: instituteId },
-      select: { studentNumberPrefix: true, studentNumberSeq: true, name: true },
-    });
-
-    const prefix = institute?.studentNumberPrefix || "STU";
-    const seq = (institute?.studentNumberSeq || 0) + 1;
-    const studentNumber = `${prefix}${String(seq).padStart(4, "0")}`;
-
-    // Create user
-    const user = await db.user.create({
-      data: {
-        instituteId,
-        firstName,
-        lastName,
-        email: email || null,
-        password: "password123",
-        mobile,
-        whatsapp: whatsapp || mobile,
-        gender,
-        type: "student",
-        status: "active",
-      },
-    });
-
-    // Create student
-    const student = await db.student.create({
-      data: {
-        userId: user.id,
-        instituteId,
-        branchId: branchId || null,
-        studentNumber,
-        fullName: `${firstName} ${lastName}`,
-        gender,
-        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
-        schoolName,
-        grade,
-        stream,
-        examYear,
-        mobile,
-        whatsapp: whatsapp || mobile,
-        email,
-        addressLine1,
-        city,
-        district,
-        status: "active",
-      },
-    });
-
-    // Update institute student number sequence
-    await db.institute.update({
-      where: { id: instituteId },
-      data: { studentNumberSeq: seq },
-    });
-
-    // Enroll in batches if provided
-    if (batchIds && batchIds.length > 0) {
-      await db.batchStudent.createMany({
-        data: batchIds.map((batchId: string) => ({
-          batchId,
-          studentId: student.id,
-          status: "active",
-        })),
+    // Wrap all writes in a transaction for atomicity
+    const student = await db.$transaction(async (tx) => {
+      // Generate student number
+      const institute = await tx.institute.findUnique({
+        where: { id: instituteId },
+        select: { studentNumberPrefix: true, studentNumberSeq: true, name: true },
       });
 
-      for (const batchId of batchIds) {
-        const count = await db.batchStudent.count({
-          where: { batchId, status: "active" },
-        });
-        await db.batch.update({
-          where: { id: batchId },
-          data: { currentStudents: count },
-        });
-      }
-    }
+      const prefix = institute?.studentNumberPrefix || "STU";
+      const seq = (institute?.studentNumberSeq || 0) + 1;
+      const studentNumber = `${prefix}${String(seq).padStart(4, "0")}`;
 
-    // Timeline entry
-    await db.studentTimeline.create({
-      data: {
-        studentId: student.id,
-        instituteId,
-        type: "enrollment",
-        description: `Student enrolled in ${institute?.name || "the institute"}`,
-      },
+      // Create user
+      const user = await tx.user.create({
+        data: {
+          instituteId,
+          firstName,
+          lastName,
+          email: email || null,
+          password: "password123",
+          mobile,
+          whatsapp: whatsapp || mobile,
+          gender,
+          type: "student",
+          status: "active",
+        },
+      });
+
+      // Create student
+      const newStudent = await tx.student.create({
+        data: {
+          userId: user.id,
+          instituteId,
+          branchId: branchId || null,
+          studentNumber,
+          fullName: `${firstName} ${lastName}`,
+          gender,
+          dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+          schoolName,
+          grade,
+          stream,
+          examYear,
+          mobile,
+          whatsapp: whatsapp || mobile,
+          email,
+          addressLine1,
+          city,
+          district,
+          status: "active",
+        },
+      });
+
+      // Update institute student number sequence
+      await tx.institute.update({
+        where: { id: instituteId },
+        data: { studentNumberSeq: seq },
+      });
+
+      // Enroll in batches if provided
+      if (batchIds && batchIds.length > 0) {
+        await tx.batchStudent.createMany({
+          data: batchIds.map((batchId: string) => ({
+            batchId,
+            studentId: newStudent.id,
+            status: "active",
+          })),
+        });
+
+        for (const batchId of batchIds) {
+          const count = await tx.batchStudent.count({
+            where: { batchId, status: "active" },
+          });
+          await tx.batch.update({
+            where: { id: batchId },
+            data: { currentStudents: count },
+          });
+        }
+      }
+
+      // Timeline entry
+      await tx.studentTimeline.create({
+        data: {
+          studentId: newStudent.id,
+          instituteId,
+          type: "enrollment",
+          description: `Student enrolled in ${institute?.name || "the institute"}`,
+        },
+      });
+
+      return newStudent;
     });
 
     return NextResponse.json({ student }, { status: 201 });
